@@ -28,8 +28,8 @@ Car Rental Backend adalah sistem manajemen komprehensif untuk bisnis penyewaan k
 
 ## Tech Stack
 
-- **Backend Framework**: [Laravel 11](https://laravel.com)
-- **Admin Panel**: [Filament](https://filamentphp.com)
+- **Backend Framework**: [Laravel 12](https://laravel.com)
+- **Admin Panel**: [Filament 4](https://filamentphp.com)
 - **ORM**: [Eloquent](https://laravel.com/docs/eloquent)
 - **Database**: MySQL/PostgreSQL
 - **Frontend Build Tool**: [Vite](https://vitejs.dev)

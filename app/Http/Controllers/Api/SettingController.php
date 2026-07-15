@@ -15,6 +15,7 @@ class SettingController extends Controller
         'site_favicon',
         'site_description',
         'contact_phone',
+        'contact_message',
         'contact_email',
         'contact_address',
         'contact_maps_url',

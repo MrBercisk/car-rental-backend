@@ -77,6 +77,12 @@ class ManageSettings extends Page
                                     ->label('Email')
                                     ->email(),
 
+                                Textarea::make('contact_message')
+                                    ->label('Kontak Pesan')
+                                    ->rows(3)
+                                    ->placeholder("Halo Admin MoraRent, saya tertarik untuk menyewa mobil. Mohon informasi mengenai unit yang tersedia. Terima kasih.")
+                                    ->columnSpanFull(),
+
                                 Textarea::make('contact_address')
                                     ->label('Alamat')
                                     ->rows(3)

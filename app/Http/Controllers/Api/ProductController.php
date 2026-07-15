@@ -27,14 +27,6 @@ class ProductController extends Controller
             $query->where('is_featured', true);
         }
 
-        if ($request->filled('min_price')) {
-            $query->where('price_per_day', '>=', $request->min_price);
-        }
-
-        if ($request->filled('max_price')) {
-            $query->where('price_per_day', '<=', $request->max_price);
-        }
-
         if ($request->filled('search')) {
             $query->where('name', 'like', '%' . $request->search . '%');
         }

@@ -83,8 +83,14 @@ class ManageSettings extends Page
                                     ->columnSpanFull(),
 
                                 TextInput::make('contact_maps_url')
-                                    ->label('URL Google Maps')
+                                    ->label('Google Maps')
                                     ->url()
+                                    ->columnSpanFull(),
+
+                                Textarea::make('contact_business_hours')
+                                    ->label('Jam Operasional')
+                                    ->rows(3)
+                                    ->placeholder("Contoh:\nSenin - Jumat : 08.00 - 20.00\nSabtu : 08.00 - 18.00\nMinggu : Libur")
                                     ->columnSpanFull(),
                             ])
                             ->columns(2),
@@ -101,14 +107,42 @@ class ManageSettings extends Page
                         Tab::make('SEO')
                             ->schema([
                                 TextInput::make('seo_meta_title')
-                                    ->label('Meta Title'),
+                                    ->label('Meta Title')
+                                    ->maxLength(60)
+                                    ->helperText('Disarankan maksimal 60 karakter.'),
 
                                 Textarea::make('seo_meta_description')
                                     ->label('Meta Description')
-                                    ->rows(3),
+                                    ->rows(3)
+                                    ->maxLength(160)
+                                    ->helperText('Disarankan maksimal 160 karakter.'),
 
-                                TextInput::make('seo_meta_keywords')
-                                    ->label('Meta Keywords (pisahkan dengan koma)'),
+                                FileUpload::make('seo_og_image')
+                                    ->label('Default Share Image (Open Graph)')
+                                    ->image()
+                                    ->directory('settings')
+                                    ->helperText('Gambar yang muncul saat website dibagikan ke WhatsApp, Facebook, atau LinkedIn.'),
+
+                                TextInput::make('seo_google_verification')
+                                    ->label('Google Search Console Verification')
+                                    ->helperText('Isi kode verifikasi dari Google Search Console.'),
+
+                                TextInput::make('seo_google_analytics')
+                                    ->label('Google Analytics (GA4 Measurement ID)')
+                                    ->placeholder('G-XXXXXXXXXX')
+                                    ->helperText('Contoh: G-ABC123DEF4'),
+
+                                TextInput::make('seo_facebook_app_id')
+                                    ->label('Facebook App ID')
+                                    ->helperText('Opsional, digunakan untuk Open Graph Facebook.'),
+                            ])
+                            ->columns(2),
+                        Tab::make('Harga & Pemesanan')
+                            ->schema([
+                                TextInput::make('driver_surcharge')
+                                    ->label('Harga dengan supir')
+                                    ->numeric()
+                                    ->prefix('Rp'),
                             ]),
                     ]),
             ])
@@ -129,7 +163,6 @@ class ManageSettings extends Page
         $data = $this->form->getState();
 
         foreach ($data as $key => $value) {
-            // Tentukan grup dari prefix key, contoh contact_phone -> group "contact"
             $group = explode('_', $key)[0] ?? 'general';
             Setting::set($key, $value, $group);
         }

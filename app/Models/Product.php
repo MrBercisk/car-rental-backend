@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
@@ -14,8 +15,7 @@ class Product extends Model
 
     protected $fillable = [
         'category_id', 'name', 'slug', 'brand', 'model_year', 'transmission',
-        'fuel_type', 'seat_capacity', 'luggage_capacity', 'price_per_day',
-        'price_per_day_with_driver', 'license_plate', 'description',
+        'fuel_type', 'seat_capacity', 'luggage_capacity', 'license_plate', 'description',
         'features', 'images', 'is_available', 'is_featured', 'sort_order',
     ];
 
@@ -24,8 +24,6 @@ class Product extends Model
         'images' => 'array',
         'is_available' => 'boolean',
         'is_featured' => 'boolean',
-        'price_per_day' => 'decimal:2',
-        'price_per_day_with_driver' => 'decimal:2',
     ];
 
     protected static function boot(): void
@@ -42,6 +40,10 @@ class Product extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+    public function packages(): HasMany
+    {
+        return $this->hasMany(CarPackage::class)->with('package')->orderBy('id');
     }
 
     public function getThumbnailAttribute(): ?string

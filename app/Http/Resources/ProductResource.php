@@ -19,15 +19,20 @@ class ProductResource extends JsonResource
             'fuel_type' => $this->fuel_type,
             'seat_capacity' => $this->seat_capacity,
             'luggage_capacity' => $this->luggage_capacity,
-            'price_per_day' => (float) $this->price_per_day,
-            'price_per_day_with_driver' => $this->price_per_day_with_driver ? (float) $this->price_per_day_with_driver : null,
             'description' => $this->description,
             'features' => $this->features ?? [],
-            'images' => collect($this->images ?? [])->map(fn ($img) => asset('storage/' . $img))->values(),
-            'thumbnail' => $this->thumbnail ? asset('storage/' . $this->thumbnail) : null,
+            'images' => collect($this->images ?? [])->map(fn ($img) => $this->resolveImageUrl($img))->values(),
+            'thumbnail' => $this->thumbnail ? $this->resolveImageUrl($this->thumbnail) : null,
             'is_available' => $this->is_available,
             'is_featured' => $this->is_featured,
             'category' => new CategoryResource($this->whenLoaded('category')),
         ];
+    }
+
+    private function resolveImageUrl(string $img): string
+    {
+        return str_starts_with($img, 'http://') || str_starts_with($img, 'https://')
+            ? $img
+            : asset('storage/' . $img);
     }
 }

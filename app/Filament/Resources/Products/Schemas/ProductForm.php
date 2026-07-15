@@ -95,21 +95,6 @@ class ProductForm
                         ->columnSpan(2),
                 ]),
 
-            ComponentsSection::make('Harga')
-                ->columns(2)
-                ->schema([
-                    TextInput::make('price_per_day')
-                        ->label('Harga / Hari (Lepas Kunci)')
-                        ->numeric()
-                        ->prefix('Rp')
-                        ->required(),
-
-                    TextInput::make('price_per_day_with_driver')
-                        ->label('Harga / Hari (Dengan Sopir)')
-                        ->numeric()
-                        ->prefix('Rp'),
-                ]),
-
             ComponentsSection::make('Deskripsi & Media')
                 ->schema([
                     Textarea::make('description')

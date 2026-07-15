@@ -48,11 +48,6 @@ class ProductsTable
                     ->label('Kursi')
                     ->suffix(' org'),
 
-                TextColumn::make('price_per_day')
-                    ->label('Harga/Hari')
-                    ->money('IDR')
-                    ->sortable(),
-
                 IconColumn::make('is_available')
                     ->label('Tersedia')
                     ->boolean(),

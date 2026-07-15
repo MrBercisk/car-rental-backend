@@ -21,11 +21,10 @@ class ContactController extends Controller
             'message' => 'required|string|max:5000',
         ]);
 
-        $contact = Contact::create($validated);
+        Contact::create($validated);
 
         return response()->json([
             'message' => 'Pesan Anda berhasil dikirim. Kami akan segera menghubungi Anda.',
-            'data' => $contact,
         ], 201);
     }
 }

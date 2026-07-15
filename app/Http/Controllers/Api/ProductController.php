@@ -11,8 +11,9 @@ class ProductController extends Controller
 {
     public function index(Request $request)
     {
+        // eager load
         $query = Product::query()
-            ->with('category')
+            ->with(['category', 'packages.package'])
             ->where('is_available', true);
 
         if ($request->filled('category')) {
@@ -28,17 +29,26 @@ class ProductController extends Controller
         }
 
         if ($request->filled('search')) {
-            $query->where('name', 'like', '%' . $request->search . '%');
+            // Escape wildcard karakter LIKE (% dan _) supaya input user tidak
+            // dianggap sebagai wildcard SQL, murni dicari sebagai teks literal.
+            $search = str_replace(['%', '_'], ['\%', '\_'], $request->search);
+            $query->where('name', 'like', '%' . $search . '%');
         }
 
-        $products = $query->orderBy('sort_order')->paginate($request->get('per_page', 12));
+        // Cegah query berat: batasi per_page maksimal 50, minimal 1.
+        // Tanpa ini, ?per_page=999999 bisa membebani database.
+        $perPage = (int) $request->get('per_page', 12);
+        $perPage = max(1, min($perPage, 50));
+
+        $products = $query->orderBy('sort_order')->paginate($perPage);
 
         return ProductResource::collection($products);
     }
 
     public function show(string $slug)
     {
-        $product = Product::with('category')
+        // eager load
+        $product = Product::with(['category', 'packages.package'])
             ->where('slug', $slug)
             ->where('is_available', true)
             ->firstOrFail();

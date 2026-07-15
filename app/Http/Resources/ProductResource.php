@@ -26,6 +26,22 @@ class ProductResource extends JsonResource
             'is_available' => $this->is_available,
             'is_featured' => $this->is_featured,
             'category' => new CategoryResource($this->whenLoaded('category')),
+            'packages' => $this->whenLoaded('packages', function () {
+                return $this->packages
+                    ->filter(fn ($cp) => $cp->package !== null)
+                    ->map(fn ($cp) => [
+                        'id' => $cp->id,
+                        'price' => (float) $cp->price,
+                        'package' => [
+                            'id' => $cp->package->id,
+                            'name' => $cp->package->name,
+                            'slug' => $cp->package->slug,
+                            'duration_value' => $cp->package->duration_value,
+                            'duration_unit' => $cp->package->duration_unit,
+                        ],
+                    ])
+                    ->values();
+            }, []),
         ];
     }
 

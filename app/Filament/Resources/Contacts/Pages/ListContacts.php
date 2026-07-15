@@ -11,7 +11,6 @@ class ListContacts extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        // Tidak ada tombol "Create" karena data berasal dari form kontak website
         return [];
     }
 }

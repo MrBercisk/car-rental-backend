@@ -19,7 +19,7 @@ class EditContact extends EditRecord
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        // Tandai otomatis sebagai sudah dibaca saat admin membuka pesan
+        // update sudah dibaca saat admin membuka pesan
         $this->record->update(['is_read' => true]);
 
         return $data;

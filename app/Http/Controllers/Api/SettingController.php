@@ -7,11 +7,7 @@ use App\Models\Setting;
 
 class SettingController extends Controller
 {
-    /**
-     * Hanya field-field ini yang boleh dilihat publik lewat API.
-     * Kalau ada field sensitif di tabel `settings` (API key, kredensial SMTP,
-     * secret payment gateway, dll), JANGAN dimasukkan ke daftar ini.
-     */
+    // field yang terekspos public
     private const PUBLIC_KEYS = [
         'site_name',
         'site_tagline',
@@ -39,7 +35,7 @@ class SettingController extends Controller
     {
         $allSettings = Setting::allAsArray();
 
-        // Whitelist: cuma ambil key yang eksplisit diizinkan, sisanya dibuang.
+        // Whitelist cuma ambil key yang eksplisit diizinkan, sisanya dibuang.
         $settings = array_intersect_key($allSettings, array_flip(self::PUBLIC_KEYS));
 
         foreach (['site_logo', 'site_favicon'] as $fileKey) {

@@ -16,7 +16,6 @@ use Filament\Tables\Table;
 
 class PackagesRelationManager extends RelationManager
 {
-    /** Matches the `packages()` hasMany relation defined on the Product model. */
     protected static string $relationship = 'packages';
 
     protected static ?string $title = 'Paket & Harga Sewa';

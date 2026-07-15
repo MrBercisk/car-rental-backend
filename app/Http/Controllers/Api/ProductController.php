@@ -29,14 +29,11 @@ class ProductController extends Controller
         }
 
         if ($request->filled('search')) {
-            // Escape wildcard karakter LIKE (% dan _) supaya input user tidak
-            // dianggap sebagai wildcard SQL, murni dicari sebagai teks literal.
             $search = str_replace(['%', '_'], ['\%', '\_'], $request->search);
             $query->where('name', 'like', '%' . $search . '%');
         }
 
-        // Cegah query berat: batasi per_page maksimal 50, minimal 1.
-        // Tanpa ini, ?per_page=999999 bisa membebani database.
+        // Cegah query berat batas per_page maksimal 50, minimal 1.
         $perPage = (int) $request->get('per_page', 12);
         $perPage = max(1, min($perPage, 50));
 

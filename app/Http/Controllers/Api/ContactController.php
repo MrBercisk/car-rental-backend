@@ -8,9 +8,7 @@ use Illuminate\Http\Request;
 
 class ContactController extends Controller
 {
-    /**
-     * Menerima submit form kontak dari frontend React.
-     */
+    /* Menerima submit form kontak dari frontend. */
     public function store(Request $request)
     {
         $validated = $request->validate([

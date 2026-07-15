@@ -23,7 +23,7 @@ class Setting extends Model
     }
 
     /**
-     * Ambil semua setting sebagai array asosiatif key => value.
+     * Ambil semua setting sebagai array key => value.
      */
     public static function allAsArray(): array
     {

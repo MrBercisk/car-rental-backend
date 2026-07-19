@@ -27,10 +27,10 @@ class ProductController extends Controller
         if ($request->filled('featured')) {
             $query->where('is_featured', true);
         }
-
+        
         if ($request->filled('search')) {
             $search = str_replace(['%', '_'], ['\%', '\_'], $request->search);
-            $query->where('name', 'like', '%' . $search . '%');
+            $query->whereRaw('name LIKE ? ESCAPE ?', ['%' . $search . '%', '\\']);
         }
 
         // Cegah query berat batas per_page maksimal 50, minimal 1.

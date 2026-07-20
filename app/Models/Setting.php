@@ -27,12 +27,21 @@ class Setting extends Model
      */
     public static function allAsArray(): array
     {
-        return static::all()->pluck('value', 'key')->toArray();
+        return Cache::rememberForever('settings.all', function () {
+            return static::all()->pluck('value', 'key')->toArray();
+        });
     }
 
-    protected static function booted(): void
+   protected static function booted(): void
     {
-        static::saved(fn (Setting $setting) => Cache::forget("setting.{$setting->key}"));
-        static::deleted(fn (Setting $setting) => Cache::forget("setting.{$setting->key}"));
+        static::saved(function (Setting $setting) {
+            Cache::forget("setting.{$setting->key}");
+            Cache::forget('settings.all'); 
+        });
+
+        static::deleted(function (Setting $setting) {
+            Cache::forget("setting.{$setting->key}");
+            Cache::forget('settings.all');
+        });
     }
 }

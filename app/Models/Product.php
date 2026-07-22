@@ -50,4 +50,9 @@ class Product extends Model
     {
         return $this->images[0] ?? null;
     }
+    
+    public function bookings(): HasMany
+    {
+        return $this->hasMany(Booking::class);
+    }
 }

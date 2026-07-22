@@ -24,8 +24,8 @@ class PaymentsRelationManager extends RelationManager
     protected static ?string $modelLabel = 'Pembayaran';
 
     /**
-     * Hitung sisa tagihan booking ini saat ini:
-     * harga paket - (total dp/pelunasan/penyesuaian - total refund)
+     * Hitung sisa tagihan
+     * harga paket - (total dp/pelunasan/penyesuaian - refund)
      * Return null kalau booking belum ada harga paket (gak ada acuan buat dibatasi).
      */
     protected function getSisaTagihan(): ?int
@@ -182,17 +182,13 @@ class PaymentsRelationManager extends RelationManager
                         return $data;
                     })
                     ->after(function () {
-                        // Beritahu halaman utama (EditBooking) supaya field
-                        // "Total Terbayar" di form utama ikut ter-refresh,
-                        // tanpa perlu reload manual.
+                     
+                        // refresh total terbayar tanpa reload manual
                         $this->dispatch('booking-payment-updated');
                     }),
             ])
             ->recordActions([
-                // Sengaja TIDAK ada EditAction / DeleteAction.
-                // Ledger pembayaran bersifat append-only: kesalahan input
-                // dikoreksi dengan entri baru (type: refund/penyesuaian),
-                // bukan mengubah/menghapus baris yang sudah tercatat.
+            
             ]);
     }
 }

@@ -37,7 +37,7 @@ class ProductUnit extends Model
     }
 
     /**
-     * Urutan prioritas assign otomatis: sort_order kecil dulu,
+     * Urutan prioritas assign sort_order kecil dulu,
      * kalau sama baru berdasarkan id (unit yang dibuat lebih dulu).
      */
     public function scopeOrdered($query)

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
@@ -15,7 +16,7 @@ class Product extends Model
 
     protected $fillable = [
         'category_id', 'name', 'slug', 'brand', 'model_year', 'transmission',
-        'fuel_type', 'seat_capacity', 'luggage_capacity', 'license_plate', 'description',
+        'fuel_type', 'seat_capacity', 'luggage_capacity', 'description',
         'features', 'images', 'is_available', 'is_featured', 'sort_order',
     ];
 
@@ -41,18 +42,24 @@ class Product extends Model
     {
         return $this->belongsTo(Category::class);
     }
+
     public function packages(): HasMany
     {
         return $this->hasMany(CarPackage::class)->with('package')->orderBy('id');
     }
 
+    public function units(): HasMany
+    {
+        return $this->hasMany(ProductUnit::class);
+    }
+
+    public function bookings(): HasManyThrough
+    {
+        return $this->hasManyThrough(Booking::class, ProductUnit::class);
+    }
+
     public function getThumbnailAttribute(): ?string
     {
         return $this->images[0] ?? null;
-    }
-    
-    public function bookings(): HasMany
-    {
-        return $this->hasMany(Booking::class);
     }
 }

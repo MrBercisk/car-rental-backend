@@ -20,14 +20,12 @@ return new class extends Migration
             $table->string('proof_path')->nullable();
             $table->text('note')->nullable();
 
-            // dari gateway kalau pembayaran ini otomatis (bukan input manual admin)
+            // dari gateway
             $table->string('gateway_transaction_id')->nullable();
 
             $table->foreignId('recorded_by')->nullable()->constrained('users')->nullOnDelete();
 
             $table->timestamps();
-            // TIDAK ada softDeletes secara sengaja — baris pembayaran yang salah
-            // dikoreksi dengan entri baru bertipe 'penyesuaian'/'refund', bukan dihapus.
 
             $table->index(['booking_id', 'paid_at']);
         });

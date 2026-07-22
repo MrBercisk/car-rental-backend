@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\Product;
 use App\Models\CarPackage;
 use App\Models\ProductUnit;
+use App\Models\Setting;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
@@ -13,6 +14,7 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section as ComponentsSection;
 use Filament\Schemas\Schema;
 
@@ -119,6 +121,30 @@ class BookingForm
                         ->disabled()
                         ->dehydrated()
                         ->helperText('Nilai historis, tidak mengikuti perubahan harga master.'),
+                    
+                    Toggle::make('with_driver')
+                        ->label('Dengan Supir')
+                        ->live()
+                        ->disabled(fn (?Booking $record) => $record?->isLocked())
+                        ->afterStateUpdated(function ($state, $set) {
+                            $set('driver_surcharge_price', $state ? (int) Setting::get('driver_surcharge', 0) : null);
+                        }),
+
+                    TextInput::make('driver_surcharge_price')
+                        ->label('Biaya Supir (snapshot)')
+                        ->prefix('Rp')
+                        ->numeric()
+                        ->disabled()
+                        ->dehydrated()
+                        ->helperText('Diambil dari Pengaturan saat toggle diaktifkan. Nilai historis, tidak berubah jika setting diedit nanti.'),
+
+                    Placeholder::make('total_price_display')
+                        ->label('Total Harga')
+                        ->content(function ($get) {
+                            $package = (int) ($get('package_price') ?? 0);
+                            $surcharge = $get('with_driver') ? (int) ($get('driver_surcharge_price') ?? 0) : 0;
+                            return 'Rp ' . number_format($package + $surcharge, 0, ',', '.');
+                        }),
                 ]),
 
             ComponentsSection::make('Status & Sumber Booking')

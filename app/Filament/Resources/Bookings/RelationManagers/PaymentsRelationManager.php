@@ -115,6 +115,7 @@ class PaymentsRelationManager extends RelationManager
 
             Select::make('method')
                 ->label('Metode')
+                ->required()
                 ->options([
                     'transfer' => 'Transfer Bank',
                     'cash' => 'Tunai',

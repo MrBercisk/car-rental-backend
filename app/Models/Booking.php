@@ -15,7 +15,7 @@ class Booking extends Model
     use HasFactory, SoftDeletes, LogsActivity;
 
     protected $fillable = [
-        'product_id',
+        'product_unit_id',
         'start_date',
         'end_date',
         'package_id',
@@ -55,9 +55,14 @@ class Booking extends Model
         'locked_at' => 'datetime',
     ];
 
-    public function product(): BelongsTo
+    public function unit(): BelongsTo
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(ProductUnit::class, 'product_unit_id');
+    }
+
+    public function getProductAttribute(): ?Product
+    {
+        return $this->unit?->product;
     }
 
     public function package(): BelongsTo
@@ -70,13 +75,9 @@ class Booking extends Model
         return $this->hasMany(BookingPayment::class)->orderBy('paid_at');
     }
 
-    /**
-     * Cek tabrakan tanggal untuk product tertentu.
-     * Hanya status yang "masih aktif" (bukan cancelled) yang dianggap menghalangi.
-     */
-    public function scopeOverlapping($query, int $productId, $start, $end, ?int $exceptId = null)
+    public function scopeOverlapping($query, int $productUnitId, $start, $end, ?int $exceptId = null)
     {
-        return $query->where('product_id', $productId)
+        return $query->where('product_unit_id', $productUnitId)
             ->whereIn('status', ['pending', 'dp', 'lunas', 'confirmed'])
             ->where('start_date', '<=', $end)
             ->where('end_date', '>=', $start)
@@ -86,8 +87,11 @@ class Booking extends Model
     /**
      * Sumber kebenaran nominal terbayar ada di tabel booking_payments (append-only ledger).
      * amount_paid di sini hanya CACHE, dihitung ulang tiap ada pembayaran baru/koreksi.
-     * Dipanggil otomatis lewat event di model BookingPayment — jangan panggil manual
-     * kecuali memang perlu resync data lama.
+     * Dipanggil otomatis lewat event di model BookingPayment.
+     *
+     * Sekaligus meng-update status booking (pending -> dp -> lunas) secara
+     * otomatis mengikuti progress pembayaran, SUPAYA admin tidak perlu
+     * ubah status manual tiap kali catat pembayaran. Lihat determineStatusFromPayment().
      */
     public function recalculateAmountPaid(): void
     {
@@ -96,15 +100,53 @@ class Booking extends Model
             ->sum('amount');
 
         $refund = $this->payments()->where('type', 'refund')->sum('amount');
+        $amountPaid = max(0, $total - $refund);
 
-        $this->updateQuietly(['amount_paid' => max(0, $total - $refund)]);
+        // Update amount_paid secara "silent" (tidak tercatat di activity log)
+        // karena histori pembayaran sudah lengkap ada di booking_payments.
+        $this->updateQuietly(['amount_paid' => $amountPaid]);
+
+        $newStatus = $this->determineStatusFromPayment($amountPaid);
+
+        if ($newStatus !== null && $newStatus !== $this->status) {
+            // Beda dari amount_paid: perubahan status SENGAJA dibiarkan
+            // tercatat normal (bukan quiet) supaya masuk activity log --
+            // "status berubah dari pending ke dp" itu informasi penting
+            // yang perlu ada jejaknya.
+            $this->update(['status' => $newStatus]);
+        }
     }
 
     /**
-     * True kalau booking sudah "closing" — field finansial tidak boleh
-     * diedit lagi lewat form Filament. Koreksi harus lewat entri baru
-     * di booking_payments (type: penyesuaian/refund).
+     * Tentukan status baru berdasarkan progress pembayaran.
+     * Return null kalau status TIDAK boleh/tidak perlu diubah otomatis.
      */
+    protected function determineStatusFromPayment(int $amountPaid): ?string
+    {
+        // Fitur ini cuma aktif kalau tracking status DP/Lunas diaktifkan di config
+        if (! config('booking.payment_status_enabled')) {
+            return null;
+        }
+
+        // Jangan sentuh booking yang sudah dibatalkan atau sudah closing/lock
+        if ($this->status === 'cancelled' || $this->isLocked()) {
+            return null;
+        }
+
+        // Belum ada harga paket -- gak ada acuan buat dibandingin
+        if (! $this->package_price || $this->package_price <= 0) {
+            return null;
+        }
+
+        // Belum ada pembayaran sama sekali -- jangan diubah (biarkan admin
+        // yang tentukan pending/confirmed di awal)
+        if ($amountPaid <= 0) {
+            return null;
+        }
+
+        return $amountPaid >= $this->package_price ? 'lunas' : 'dp';
+    }
+
     public function isLocked(): bool
     {
         return $this->locked_at !== null;

@@ -51,9 +51,6 @@ class ProductForm
                         ->label('Tahun')
                         ->maxLength(10),
 
-                    TextInput::make('license_plate')
-                        ->label('Nomor Plat')
-                        ->maxLength(20),
                 ]),
 
             ComponentsSection::make('Spesifikasi')

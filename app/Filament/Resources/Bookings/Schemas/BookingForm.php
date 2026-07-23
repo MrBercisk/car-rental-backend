@@ -3,9 +3,11 @@
 namespace App\Filament\Resources\Bookings\Schemas;
 
 use App\Models\Booking;
+use App\Models\Package;
 use App\Models\Product;
 use App\Models\CarPackage;
 use App\Models\ProductUnit;
+use App\Models\Setting;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
@@ -13,6 +15,7 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section as ComponentsSection;
 use Filament\Schemas\Schema;
 
@@ -61,7 +64,7 @@ class BookingForm
                         ->required()
                         ->live()
                         ->disabled(fn ($get, ?Booking $record) => ! $get('product_id_temp') || $record?->isLocked())
-                        ->helperText('Hanya unit berstatus Aktif yang muncul. Validasi tabrakan tanggal dilakukan saat simpan.'),
+                        ->helperText('Hanya unit berstatus Aktif yang muncul. Pengecekan tabrakan tanggal dilakukan saat simpan.'),
 
                     Select::make('package_id')
                         ->label('Paket Sewa')
@@ -93,6 +96,10 @@ class BookingForm
                                 $set('package_label', $productPackage->package->name);
                                 $set('package_price', $productPackage->price);
                             }
+
+                            // Paket berubah -> kalau toggle supir lagi aktif,
+                            // biaya supir ikut disesuaikan ke tarif paket yang baru.
+                            static::syncDriverFee($get, $set);
                         }),
 
                     DatePicker::make('start_date')
@@ -119,6 +126,33 @@ class BookingForm
                         ->disabled()
                         ->dehydrated()
                         ->helperText('Nilai historis, tidak mengikuti perubahan harga master.'),
+
+                    Toggle::make('with_driver')
+                        ->label('Sewa dengan Supir')
+                        ->live()
+                        ->disabled(fn (?Booking $record) => $record?->isLocked())
+                        ->afterStateUpdated(function ($get, $set) {
+                            static::syncDriverFee($get, $set);
+                        }),
+
+                    TextInput::make('driver_surcharge_price')
+                        ->label('Biaya Supir (snapshot)')
+                        ->prefix('Rp')
+                        ->numeric()
+                        ->disabled()
+                        ->dehydrated()
+                        ->visible(fn ($get) => (bool) $get('with_driver'))
+                        ->helperText('Diambil dari biaya supir paket terkait (atau default Pengaturan kalau paket belum diisi). Nilai historis, tidak berubah walau diedit nanti.'),
+
+                    Placeholder::make('total_price_display')
+                        ->label('Total Harga Sewa')
+                        ->content(function ($get) {
+                            $package = (int) ($get('package_price') ?? 0);
+                            $driver = $get('with_driver') ? (int) ($get('driver_surcharge_price') ?? 0) : 0;
+
+                            return 'Rp ' . number_format($package + $driver, 0, ',', '.');
+                        })
+                        ->columnSpanFull(),
                 ]),
 
             ComponentsSection::make('Status & Sumber Booking')
@@ -208,4 +242,35 @@ class BookingForm
                 ]),
         ]);
     }
+
+    /**
+     * Hitung ulang driver_surcharge_price berdasarkan paket yang lagi dipilih +
+     * status toggle with_driver. Dipanggil tiap kali salah satu dari
+     * dua hal itu berubah, supaya driver_surcharge_price selalu konsisten dengan
+     * kombinasi terkini sebelum akhirnya di-snapshot pas Save.
+     */
+    protected static function syncDriverFee($get, $set): void
+    {
+        if (! $get('with_driver')) {
+            $set('driver_surcharge_price', 0);
+ 
+            return;
+        }
+ 
+        $packageId = $get('package_id');
+        $fee = 0;
+ 
+        if ($packageId) {
+            $package = Package::find($packageId);
+            $fee = $package?->effective_driver_fee ?? 0;
+        }
+ 
+        if ($fee <= 0) {
+            // Belum ada paket dipilih, atau paket itu & Settings dua-duanya kosong.
+            $fee = (int) Setting::get('driver_surcharge', 0);
+        }
+ 
+        $set('driver_surcharge_price', (int) $fee);
+    }
+
 }

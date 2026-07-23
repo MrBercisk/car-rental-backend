@@ -21,6 +21,8 @@ class Booking extends Model
         'package_id',
         'package_label',
         'package_price',
+        'with_driver',
+        'driver_surcharge_price',
         'status',
         'customer_name',
         'customer_phone',
@@ -55,6 +57,12 @@ class Booking extends Model
         'locked_at' => 'datetime',
     ];
 
+
+    // Total harga = harga paket + surcharge supir
+    public function getTotalPriceAttribute(): int
+    {
+        return ($this->package_price ?? 0) + ($this->with_driver ? ($this->driver_surcharge_price ?? 0) : 0);
+    }
     public function unit(): BelongsTo
     {
         return $this->belongsTo(ProductUnit::class, 'product_unit_id');
@@ -122,17 +130,16 @@ class Booking extends Model
         }
 
         // belum ada harga paket
-        if (! $this->package_price || $this->package_price <= 0) {
+        if (! $this->total_price || $this->total_price <= 0) {
             return null;
         }
-
         // belum ada pembayaran sama sekali 
         // yang tentukan pending/confirmed di awal
         if ($amountPaid <= 0) {
             return null;
         }
 
-        return $amountPaid >= $this->package_price ? 'lunas' : 'dp';
+        return $amountPaid >= $this->total_price ? 'lunas' : 'dp';
     }
 
     public function isLocked(): bool
@@ -147,6 +154,8 @@ class Booking extends Model
                 'status',
                 'amount_paid',
                 'package_price',
+                'with_driver',
+                'driver_surcharge_price',
                 'gateway_status',
                 'locked_at',
                 'start_date',

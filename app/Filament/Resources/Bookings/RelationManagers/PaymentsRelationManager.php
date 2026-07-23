@@ -8,7 +8,6 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Get;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Utilities\Get as UtilitiesGet;
 use Filament\Schemas\Schema;
@@ -24,8 +23,9 @@ class PaymentsRelationManager extends RelationManager
     protected static ?string $modelLabel = 'Pembayaran';
 
     /**
-     * Hitung sisa tagihan
-     * harga paket - (total dp/pelunasan/penyesuaian - refund)
+     * Hitung sisa tagihan:
+     * total_price (harga paket + biaya supir kalau with_driver aktif)
+     * dikurangi (total dp/pelunasan/penyesuaian - refund).
      * Return null kalau booking belum ada harga paket (gak ada acuan buat dibatasi).
      */
     protected function getSisaTagihan(): ?int
@@ -44,7 +44,8 @@ class PaymentsRelationManager extends RelationManager
             ->where('type', 'refund')
             ->sum('amount');
 
-        return (int) $booking->package_price - ((int) $sudahDibayar - (int) $refund);
+        // total_price = package_price + driver_surcharge_price (kalau with_driver aktif)
+        return $booking->total_price - ((int) $sudahDibayar - (int) $refund);
     }
 
     public function form(Schema $schema): Schema
@@ -87,7 +88,7 @@ class PaymentsRelationManager extends RelationManager
                         function (string $attribute, $value, \Closure $fail) use ($get) {
                             $type = $get('type');
 
-                            // Refund & booking tanpa harga paket tidak dibatasi
+                            // Refund tidak dibatasi sisa tagihan
                             if ($type === 'refund') {
                                 return;
                             }
@@ -115,6 +116,7 @@ class PaymentsRelationManager extends RelationManager
 
             Select::make('method')
                 ->label('Metode')
+                ->required()
                 ->options([
                     'transfer' => 'Transfer Bank',
                     'cash' => 'Tunai',
@@ -177,18 +179,16 @@ class PaymentsRelationManager extends RelationManager
                 CreateAction::make()
                     ->label('Catat Pembayaran')
                     ->mutateFormDataUsing(function (array $data) {
-                       $data['recorded_by'] = auth()->guard()->id();
+                        $data['recorded_by'] = auth()->guard()->id();
 
                         return $data;
                     })
                     ->after(function () {
-                     
                         // refresh total terbayar tanpa reload manual
                         $this->dispatch('booking-payment-updated');
                     }),
             ])
             ->recordActions([
-            
             ]);
     }
 }

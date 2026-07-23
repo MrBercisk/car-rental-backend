@@ -24,11 +24,11 @@ class TestimonialForm
                 ->placeholder('contoh: Wisatawan dari Jakarta')
                 ->maxLength(255),
 
-            FileUpload::make('photo')
-                ->label('Foto')
-                ->image()
-                ->avatar()
-                ->directory('testimonials'),
+            // FileUpload::make('photo')
+            //     ->label('Foto')
+            //     ->image()
+            //     ->avatar()
+            //     ->directory('testimonials'),
 
             Select::make('rating')
                 ->label('Rating')

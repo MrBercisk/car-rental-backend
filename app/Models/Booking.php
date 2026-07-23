@@ -21,6 +21,8 @@ class Booking extends Model
         'package_id',
         'package_label',
         'package_price',
+        'with_driver',
+        'driver_surcharge_price',
         'status',
         'customer_name',
         'customer_phone',
@@ -55,6 +57,12 @@ class Booking extends Model
         'locked_at' => 'datetime',
     ];
 
+
+    // Total harga = harga paket + surcharge supir
+    public function getTotalPriceAttribute(): int
+    {
+        return ($this->package_price ?? 0) + ($this->with_driver ? ($this->driver_surcharge_price ?? 0) : 0);
+    }
     public function unit(): BelongsTo
     {
         return $this->belongsTo(ProductUnit::class, 'product_unit_id');
@@ -84,15 +92,8 @@ class Booking extends Model
             ->when($exceptId, fn ($q) => $q->where('id', '!=', $exceptId));
     }
 
-    /**
-     * Sumber kebenaran nominal terbayar ada di tabel booking_payments (append-only ledger).
-     * amount_paid di sini hanya CACHE, dihitung ulang tiap ada pembayaran baru/koreksi.
-     * Dipanggil otomatis lewat event di model BookingPayment.
-     *
-     * Sekaligus meng-update status booking (pending -> dp -> lunas) secara
-     * otomatis mengikuti progress pembayaran, SUPAYA admin tidak perlu
-     * ubah status manual tiap kali catat pembayaran. Lihat determineStatusFromPayment().
-     */
+ 
+    /* amount paid cuma acuan aja, diitung ulang tiap pembayaran baru, nominal terbayar real ada di booking payment */
     public function recalculateAmountPaid(): void
     {
         $total = $this->payments()
@@ -102,49 +103,43 @@ class Booking extends Model
         $refund = $this->payments()->where('type', 'refund')->sum('amount');
         $amountPaid = max(0, $total - $refund);
 
-        // Update amount_paid secara "silent" (tidak tercatat di activity log)
-        // karena histori pembayaran sudah lengkap ada di booking_payments.
+        // update amount paid
         $this->updateQuietly(['amount_paid' => $amountPaid]);
 
         $newStatus = $this->determineStatusFromPayment($amountPaid);
 
         if ($newStatus !== null && $newStatus !== $this->status) {
-            // Beda dari amount_paid: perubahan status SENGAJA dibiarkan
-            // tercatat normal (bukan quiet) supaya masuk activity log --
-            // "status berubah dari pending ke dp" itu informasi penting
-            // yang perlu ada jejaknya.
             $this->update(['status' => $newStatus]);
         }
     }
 
     /**
-     * Tentukan status baru berdasarkan progress pembayaran.
-     * Return null kalau status TIDAK boleh/tidak perlu diubah otomatis.
+     * Status by pembayaran 
+     * return null kalau status tidak boleh/tidak perlu diubah otomatis.
      */
     protected function determineStatusFromPayment(int $amountPaid): ?string
     {
-        // Fitur ini cuma aktif kalau tracking status DP/Lunas diaktifkan di config
+        // Fitur cuma aktif kalau tracking status DP/Lunas diaktifkan di config
         if (! config('booking.payment_status_enabled')) {
             return null;
         }
 
-        // Jangan sentuh booking yang sudah dibatalkan atau sudah closing/lock
+        // Jstatys cancel sm di lock ga return apa2
         if ($this->status === 'cancelled' || $this->isLocked()) {
             return null;
         }
 
-        // Belum ada harga paket -- gak ada acuan buat dibandingin
-        if (! $this->package_price || $this->package_price <= 0) {
+        // belum ada harga paket
+        if (! $this->total_price || $this->total_price <= 0) {
             return null;
         }
-
-        // Belum ada pembayaran sama sekali -- jangan diubah (biarkan admin
-        // yang tentukan pending/confirmed di awal)
+        // belum ada pembayaran sama sekali 
+        // yang tentukan pending/confirmed di awal
         if ($amountPaid <= 0) {
             return null;
         }
 
-        return $amountPaid >= $this->package_price ? 'lunas' : 'dp';
+        return $amountPaid >= $this->total_price ? 'lunas' : 'dp';
     }
 
     public function isLocked(): bool
@@ -159,6 +154,8 @@ class Booking extends Model
                 'status',
                 'amount_paid',
                 'package_price',
+                'with_driver',
+                'driver_surcharge_price',
                 'gateway_status',
                 'locked_at',
                 'start_date',

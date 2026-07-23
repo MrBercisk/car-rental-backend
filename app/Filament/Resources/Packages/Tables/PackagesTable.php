@@ -34,6 +34,12 @@ class PackagesTable
                     ->counts('carPackages')
                     ->badge(),
 
+                TextColumn::make('driver_fee')
+                    ->label('Biaya Supir')
+                    ->prefix('Rp')
+                    ->numeric()
+                    ->sortable(),
+
                 TextColumn::make('created_at')
                     ->label('Dibuat')
                     ->dateTime('d M Y')

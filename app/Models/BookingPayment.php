@@ -31,7 +31,7 @@ class BookingPayment extends Model
     {
         parent::boot();
 
-        // setiap kali ada pembayaran baru dicatat (atau dihapus, meski jarang terjadi),
+        // setiap kali ada pembayaran baru dicatat
         // langsung sinkronkan cache amount_paid di booking induknya
         static::created(function (BookingPayment $payment) {
             $payment->booking?->recalculateAmountPaid();

@@ -45,6 +45,13 @@ class PackageForm
                         ])
                         ->required(),
 
+                    TextInput::make('driver_fee')
+                        ->label('Biaya Supir untuk Paket Ini')
+                        ->prefix('Rp')
+                        ->numeric()
+                        ->minValue(0)
+                        ->helperText('Kosongkan kalau ingin pakai default dari Pengaturan > Harga & Pemesanan.'),
+
                     TextInput::make('sort_order')
                         ->label('Urutan Tampil')
                         ->helperText('Angka kecil tampil lebih dulu')

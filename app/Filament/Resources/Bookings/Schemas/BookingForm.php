@@ -244,10 +244,7 @@ class BookingForm
     }
 
     /**
-     * Hitung ulang driver_surcharge_price berdasarkan paket yang lagi dipilih +
-     * status toggle with_driver. Dipanggil tiap kali salah satu dari
-     * dua hal itu berubah, supaya driver_surcharge_price selalu konsisten dengan
-     * kombinasi terkini sebelum akhirnya di-snapshot pas Save.
+     * Hitung ulang driver_surcharge_price berdasarkan paket yang lagi dipilih
      */
     protected static function syncDriverFee($get, $set): void
     {

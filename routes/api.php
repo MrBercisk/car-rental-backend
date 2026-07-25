@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\BannerController;
+use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\ProductController;
@@ -10,22 +11,36 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
 
+    // setting
     Route::get('/settings', SettingController::class . '@index')->name('settings.index');
 
+    // banners
     Route::get('/banners', [BannerController::class, 'index'])->name('banners.index');
 
+    // testi
     Route::get('/testimonials', [TestimonialController::class, 'index'])->name('testimonials.index');
 
+    // kategori
     Route::get('/categories', [CategoryController::class, 'index'])->name('categories.index');
     Route::get('/categories/{slug}', [CategoryController::class, 'show'])
         ->where('slug', '[a-z0-9\-]+')
         ->name('categories.show');
 
+    // produk
     Route::get('/products', [ProductController::class, 'index'])->name('products.index');
     Route::get('/products/{slug}', [ProductController::class, 'show'])
         ->where('slug', '[a-z0-9\-]+')
         ->name('products.show');
 
+    Route::get('/products/{slug}/availability', [ProductController::class, 'availability']);
+ 
+
+    // boooking
+    Route::get('/booking-config', [BookingController::class, 'config']);
+    Route::post('/bookings', [BookingController::class, 'store']);
+    
+
+    // kontak
     Route::post('/contact', [ContactController::class, 'store'])
         ->middleware('throttle:contact')
         ->name('contact.store');

@@ -38,6 +38,7 @@ class ProductResource extends JsonResource
                             'slug' => $cp->package->slug,
                             'duration_value' => $cp->package->duration_value,
                             'duration_unit' => $cp->package->duration_unit,
+                            'driver_fee' => (float) $cp->package->effective_driver_fee,
                         ],
                     ])
                     ->values();

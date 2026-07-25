@@ -21,7 +21,7 @@ class TestimonialsTable
     {
         return $table
             ->columns([
-                ImageColumn::make('photo')->label('Foto')->circular(),
+                // ImageColumn::make('photo')->label('Foto')->circular(),
                 TextColumn::make('name')->label('Nama')->searchable(),
                 TextColumn::make('role')->label('Keterangan'),
                 TextColumn::make('rating')->label('Rating')->formatStateUsing(fn ($state) => str_repeat('⭐', $state)),

@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\Booking;
+use App\Observers\BookingObserver;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -27,5 +29,7 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinutes(10, 3)->by($key);
         });
+
+        Booking::observe(BookingObserver::class);
     }
 }

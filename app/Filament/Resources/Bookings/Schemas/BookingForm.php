@@ -109,7 +109,7 @@ class BookingForm
 
                     DatePicker::make('end_date')
                         ->label('Tanggal Selesai')
-                        ->required()
+                        ->disabled()
                         ->afterOrEqual('start_date')
                         ->disabled(fn (?Booking $record) => $record?->isLocked()),
 
@@ -268,6 +268,22 @@ class BookingForm
         }
  
         $set('driver_surcharge_price', (int) $fee);
+    }
+    protected static function syncEndDate($get, $set): void
+    {
+        $startDate = $get('start_date');
+        $packageId = $get('package_id');
+        if (!$startDate || !$packageId) return;
+
+        $package = \App\Models\Package::find($packageId);
+        if (!$package) return;
+
+        $start = \Carbon\Carbon::parse($startDate);
+        $end = $package->duration_unit === 'hour'
+            ? $start->copy()
+            : $start->copy()->addDays(max(0, $package->duration_value - 1));
+
+        $set('end_date', $end->toDateString());
     }
 
 }

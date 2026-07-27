@@ -22,7 +22,7 @@ class BookingController extends Controller
             'mode' => config('booking.mode'),
             'calendar_enabled' => (bool) config('booking.calendar_enabled'),
             'payment_proof_enabled' => (bool) config('booking.payment_proof_enabled'),
-            'whatsapp_number' => config('booking.whatsapp_number'),
+            'whatsapp_number' => $this->sanitizePhoneNumber(Setting::get('contact_phone')) ?? config('booking.whatsapp_number'),
         ]);
     }
 
@@ -88,6 +88,10 @@ class BookingController extends Controller
 
         [$packageLabel, $packagePrice, $package] = $this->resolvePackage($product->id, $data['package_id'] ?? null);
 
+        
+        $startDate = \Carbon\Carbon::parse($data['start_date']);
+        $endDate = $this->calculateEndDate($startDate, $package);
+
         $withDriver = (bool) ($data['with_driver'] ?? false);
         $driverFee = 0;
 
@@ -98,7 +102,7 @@ class BookingController extends Controller
         $booking = Booking::create([
             'product_unit_id' => $unit->id,
             'start_date' => $data['start_date'],
-            'end_date' => $data['end_date'],
+            'end_date' => $endDate->toDateString(),
             'package_id' => $data['package_id'] ?? null,
             'package_label' => $packageLabel,
             'package_price' => $packagePrice,
@@ -117,6 +121,18 @@ class BookingController extends Controller
             'booking' => new BookingResource($booking->load('unit.product')),
             'whatsapp_link' => $this->buildWhatsappLink($product, $data),
         ]);
+    }
+    protected function calculateEndDate(\Carbon\Carbon $startDate, ?\App\Models\Package $package): \Carbon\Carbon
+    {
+        if (! $package) {
+            return $startDate->copy();
+        }
+
+        return match ($package->duration_unit) {
+            'hour' => $startDate->copy(), // 12 Jam & 24 Jam -- tetap blok 1 hari kalender
+            'day' => $startDate->copy()->addDays(max(0, $package->duration_value - 1)),
+            default => $startDate->copy(),
+        };
     }
 
     /* cari unit yang aktif dan kosong termasuk blokir servis di tanggal filter sort order dari terkecil */
@@ -150,27 +166,63 @@ class BookingController extends Controller
         return [$productPackage->package->name, $productPackage->price, $productPackage->package];
     }
 
-    protected function buildWhatsappLink(Product $product, array $data): string
+    /**
+     * nomor telepon jadi format tanpa simbol,
+     */
+    protected function sanitizePhoneNumber(?string $number): ?string
     {
-        $number = config('booking.whatsapp_number');
-
-        $lines = [
-            "Halo, saya ingin sewa {$product->name}",
-            "Tanggal: {$data['start_date']} s/d {$data['end_date']}",
-            "Nama: {$data['customer_name']}",
-            "No HP: {$data['customer_phone']}",
-        ];
-
-        if (! empty($data['with_driver'])) {
-            $lines[] = 'Dengan supir: Ya';
+        if (! $number) {
+            return null;
         }
 
+        $digits = preg_replace('/\D/', '', $number);
+
+        // Nomor lokal diawali 0 ganti jadi kode negara 62
+        if (str_starts_with($digits, '0')) {
+            $digits = '62' . substr($digits, 1);
+        }
+
+        return $digits ?: null;
+    }
+
+    protected function buildWhatsappLink(Product $product, array $data, ?string $packageLabel = null): string
+    {
+        $number = $this->sanitizePhoneNumber(Setting::get('contact_phone'));
+        $siteName = Setting::get('site_name', 'Kami');
+ 
+        $lines = [
+            "Halo *{$siteName}*, saya ingin mengajukan reservasi mobil:",
+            '',
+            "Mobil: *{$product->name}*",
+            "Tanggal: {$data['start_date']} s/d {$data['end_date']}",
+        ];
+ 
+        if ($packageLabel) {
+            $lines[] = "📦 Paket: {$packageLabel}";
+        }
+ 
+        $lines[] = ! empty($data['with_driver'])
+            ? 'Layanan Sopir: Ya'
+            : 'Layanan: Lepas Kunci';
+ 
+        $lines = array_merge($lines, [
+            '',
+            "Nama: {$data['customer_name']}",
+            "No HP: {$data['customer_phone']}",
+        ]);
+ 
         if (! empty($data['notes'])) {
             $lines[] = "Catatan: {$data['notes']}";
         }
-
-        $message = implode("\n", $lines);
-
-        return "https://wa.me/{$number}?text=" . urlencode($message);
+ 
+        $lines[] = '';
+        $lines[] = 'Mohon informasi ketersediaan dan konfirmasinya. Terima kasih.';
+ 
+        $message = collect($lines)->implode("\n");
+ 
+        return $number
+            ? "https://wa.me/{$number}?text=" . urlencode($message)
+            : '';
     }
+
 }

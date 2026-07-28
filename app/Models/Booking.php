@@ -27,6 +27,9 @@ class Booking extends Model
         'customer_name',
         'customer_phone',
         'notes',
+        'delivery_address',
+        'delivery_distance_km',
+        'delivery_fee_price',
         'payment_proof_path',
         'amount_paid',
         'source',
@@ -51,6 +54,9 @@ class Booking extends Model
         'amount_paid' => 'integer',
         'gross_amount' => 'integer',
         'package_price' => 'integer',
+        'driver_surcharge_price' => 'integer',
+        'delivery_distance_km' => 'float',
+        'delivery_fee_price' => 'integer',
         'paid_at' => 'datetime',
         'expired_at' => 'datetime',
         'gateway_payload' => 'array',
@@ -58,10 +64,12 @@ class Booking extends Model
     ];
 
 
-    // Total harga = harga paket + surcharge supir
+    // Total harga = harga paket + surcharge supir (kalau with_driver aktif) + biaya antar jemput
     public function getTotalPriceAttribute(): int
     {
-        return ($this->package_price ?? 0) + ($this->with_driver ? ($this->driver_surcharge_price ?? 0) : 0);
+        return ($this->package_price ?? 0)
+            + ($this->with_driver ? ($this->driver_surcharge_price ?? 0) : 0)
+            + ($this->delivery_fee_price ?? 0);
     }
     public function unit(): BelongsTo
     {
@@ -156,6 +164,8 @@ class Booking extends Model
                 'package_price',
                 'with_driver',
                 'driver_surcharge_price',
+                'delivery_distance_km',
+                'delivery_fee_price',
                 'gateway_status',
                 'locked_at',
                 'start_date',

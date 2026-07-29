@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\BannerController;
 use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ContactController;
+use App\Http\Controllers\Api\DokuNotificationController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\TestimonialController;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function () {
 
     // setting
-    Route::get('/settings', [SettingController::class . 'index'])->name('settings.index');
+    Route::get('/settings', SettingController::class . '@index')->name('settings.index');
 
     // banners
     Route::get('/banners', [BannerController::class, 'index'])->name('banners.index');
@@ -35,6 +36,12 @@ Route::prefix('v1')->group(function () {
     Route::get('/products/{slug}/availability', [ProductController::class, 'availability'])
     ->where('slug', '[a-z0-9\-]+');
  
+    Route::post('/bookings/payment', [BookingController::class, 'payNow']);
+    
+    // Webhook -- HARUS di luar middleware auth (Doku yang panggil, bukan browser customer)
+    Route::post('/doku/notification', [DokuNotificationController::class, 'handle']);
+    
+
     // boooking
     Route::get('/booking-config', [BookingController::class, 'config']);
     Route::post('/bookings', [BookingController::class, 'store'])

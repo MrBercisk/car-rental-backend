@@ -9,8 +9,10 @@ use App\Models\Product;
 use App\Models\CarPackage;
 use App\Models\ProductUnit;
 use App\Models\Setting;
+use App\Services\DokuCheckoutService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class BookingController extends Controller
 {
@@ -261,5 +263,125 @@ class BookingController extends Controller
             ? "https://wa.me/{$number}?text=" . urlencode($message)
             : '';
     }
+
+
+    public function payNow(Request $request, DokuCheckoutService $doku)
+    {
+        $validator = Validator::make($request->all(), [
+            'product_id' => 'required|exists:products,id',
+            'package_id' => 'nullable|exists:packages,id',
+            'start_date' => 'required|date|after_or_equal:today',
+            'end_date' => 'required|date|after_or_equal:start_date',
+            'with_driver' => 'boolean',
+            'customer_name' => 'required|string|max:255',
+            'customer_phone' => 'required|string|max:50',
+            'customer_email' => 'required|email|max:255',
+            'notes' => 'nullable|string|max:1000',
+        ]);
+    
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+    
+        $data = $validator->validated();
+        $product = Product::findOrFail($data['product_id']);
+    
+        // Sama seperti store(): butuh unit fisik yang kosong di rentang tanggal
+        $unit = $this->findAvailableUnit($product->id, $data['start_date'], $data['end_date']);
+    
+        if (! $unit) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Mohon maaf, semua unit sudah penuh di tanggal yang dipilih. Silakan pilih tanggal lain.',
+            ], 422);
+        }
+    
+        [$packageLabel, $packagePrice, $package] = $this->resolvePackage($product->id, $data['package_id'] ?? null);
+    
+        $startDate = \Carbon\Carbon::parse($data['start_date']);
+        $endDate = $this->calculateEndDate($startDate, $package);
+    
+        $withDriver = (bool) ($data['with_driver'] ?? false);
+        $driverFee = 0;
+    
+        if ($withDriver) {
+            $driverFee = $package?->effective_driver_fee ?? (int) Setting::get('driver_surcharge', 0);
+        }
+    
+        // Sesuai accessor getTotalPriceAttribute(): package_price + driver_surcharge_price (+ delivery, tidak dipakai di alur ini)
+        $grossAmount = (int) $packagePrice + ($withDriver ? $driverFee : 0);
+        $invoiceNumber = 'INV-' . now()->format('Ymd') . '-' . strtoupper(Str::random(6));
+        $paymentDueMinutes = 60;
+    
+        // Simpan booking dulu dengan status "pending" SEBELUM hit Doku -- ini
+        // sudah otomatis nge-block unit karena scopeOverlapping() include status
+        // 'pending' pada daftar status yang dianggap "terpakai".
+        $booking = Booking::create([
+            'product_unit_id' => $unit->id,
+            'start_date' => $data['start_date'],
+            'end_date' => $endDate->toDateString(),
+            'package_id' => $data['package_id'] ?? null,
+            'package_label' => $packageLabel,
+            'package_price' => $packagePrice,
+            'with_driver' => $withDriver,
+            'driver_surcharge_price' => $withDriver ? $driverFee : 0,
+            'status' => 'pending',
+            'customer_name' => $data['customer_name'],
+            'customer_phone' => $data['customer_phone'],
+            'notes' => $data['notes'] ?? null,
+            'source' => 'payment_gateway',
+            // kolom gateway yang sudah ada di model:
+            'payment_gateway' => 'doku',
+            'gateway_order_id' => $invoiceNumber,
+            'gross_amount' => $grossAmount,
+            'expired_at' => now()->addMinutes($paymentDueMinutes),
+        ]);
+    
+        $result = $doku->createPayment(
+            order: [
+                'amount' => $grossAmount,
+                'invoice_number' => $invoiceNumber,
+                'payment_due_date' => $paymentDueMinutes,
+                'line_items' => [[
+                    'name' => $product->name . ($packageLabel ? " ({$packageLabel})" : ''),
+                    'price' => $grossAmount,
+                    'quantity' => 1,
+                ]],
+            ],
+            customer: [
+                'name' => $data['customer_name'],
+                'email' => $data['customer_email'],
+                'phone' => $data['customer_phone'],
+            ],
+            callbackUrl: rtrim(config('app.frontend_url'), '/') . '/reservasi/selesai?booking=' . $booking->id,
+        );
+    
+        if (! $result['success']) {
+            // Gagal generate link pembayaran -> jangan tinggalkan booking nyangkut,
+            // batalkan supaya unit kembali tersedia untuk customer lain.
+            $booking->update(['status' => 'cancelled']);
+    
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'] ?? 'Gagal membuat link pembayaran. Coba lagi.',
+            ], 502);
+        }
+    
+        $booking->update([
+            'payment_redirect_url' => $result['payment_url'],
+            'gateway_status' => 'pending',
+        ]);
+    
+        return response()->json([
+            'success' => true,
+            'saved' => true,
+            'booking' => new BookingResource($booking->load('unit.product')),
+            'payment_url' => $result['payment_url'],
+        ]);
+    }
+
 
 }

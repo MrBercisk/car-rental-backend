@@ -9,8 +9,10 @@ use App\Models\Product;
 use App\Models\CarPackage;
 use App\Models\ProductUnit;
 use App\Models\Setting;
+use App\Services\DokuCheckoutService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class BookingController extends Controller
 {
@@ -22,7 +24,7 @@ class BookingController extends Controller
             'mode' => config('booking.mode'),
             'calendar_enabled' => (bool) config('booking.calendar_enabled'),
             'payment_proof_enabled' => (bool) config('booking.payment_proof_enabled'),
-            'whatsapp_number' => config('booking.whatsapp_number'),
+            'whatsapp_number' => $this->sanitizePhoneNumber(Setting::get('contact_phone')) ?? config('booking.whatsapp_number'),
         ]);
     }
 
@@ -88,6 +90,10 @@ class BookingController extends Controller
 
         [$packageLabel, $packagePrice, $package] = $this->resolvePackage($product->id, $data['package_id'] ?? null);
 
+        
+        $startDate = \Carbon\Carbon::parse($data['start_date']);
+        $endDate = $this->calculateEndDate($startDate, $package);
+
         $withDriver = (bool) ($data['with_driver'] ?? false);
         $driverFee = 0;
 
@@ -98,7 +104,7 @@ class BookingController extends Controller
         $booking = Booking::create([
             'product_unit_id' => $unit->id,
             'start_date' => $data['start_date'],
-            'end_date' => $data['end_date'],
+            'end_date' => $endDate->toDateString(),
             'package_id' => $data['package_id'] ?? null,
             'package_label' => $packageLabel,
             'package_price' => $packagePrice,
@@ -117,6 +123,55 @@ class BookingController extends Controller
             'booking' => new BookingResource($booking->load('unit.product')),
             'whatsapp_link' => $this->buildWhatsappLink($product, $data),
         ]);
+    }
+
+    /* cancel booking dari customer pakai cancel token yang direturn pas booking berhasil dibuat */
+
+    public function cancel(Request $request, Booking $booking)
+    {
+        $validator = Validator::make($request->all(), [
+            'cancel_token' => 'required|string',
+        ]);
+ 
+        if ($validator->fails()) {
+            return response()->json(['success' => false, 'errors' => $validator->errors()], 422);
+        }
+ 
+        if (! $booking->cancel_token || ! hash_equals($booking->cancel_token, $request->cancel_token)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Token tidak valid.',
+            ], 403);
+        }
+ 
+        if (! $booking->isCancellableByCustomer()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking ini tidak bisa dibatalkan otomatis (sudah lunas/dikonfirmasi/di-lock). Silakan hubungi kami langsung.',
+            ], 422);
+        }
+ 
+        $booking->update(['status' => 'cancelled']);
+ 
+        return response()->json([
+            'success' => true,
+            'message' => 'Booking berhasil dibatalkan.',
+        ]);
+    }
+ 
+
+
+    protected function calculateEndDate(\Carbon\Carbon $startDate, ?\App\Models\Package $package): \Carbon\Carbon
+    {
+        if (! $package) {
+            return $startDate->copy();
+        }
+
+        return match ($package->duration_unit) {
+            'hour' => $startDate->copy(), // 12 Jam & 24 Jam -- tetap blok 1 hari kalender
+            'day' => $startDate->copy()->addDays(max(0, $package->duration_value - 1)),
+            default => $startDate->copy(),
+        };
     }
 
     /* cari unit yang aktif dan kosong termasuk blokir servis di tanggal filter sort order dari terkecil */
@@ -150,27 +205,183 @@ class BookingController extends Controller
         return [$productPackage->package->name, $productPackage->price, $productPackage->package];
     }
 
-    protected function buildWhatsappLink(Product $product, array $data): string
+    /**
+     * nomor telepon jadi format tanpa simbol,
+     */
+    protected function sanitizePhoneNumber(?string $number): ?string
     {
-        $number = config('booking.whatsapp_number');
-
-        $lines = [
-            "Halo, saya ingin sewa {$product->name}",
-            "Tanggal: {$data['start_date']} s/d {$data['end_date']}",
-            "Nama: {$data['customer_name']}",
-            "No HP: {$data['customer_phone']}",
-        ];
-
-        if (! empty($data['with_driver'])) {
-            $lines[] = 'Dengan supir: Ya';
+        if (! $number) {
+            return null;
         }
 
+        $digits = preg_replace('/\D/', '', $number);
+
+        // Nomor lokal diawali 0 ganti jadi kode negara 62
+        if (str_starts_with($digits, '0')) {
+            $digits = '62' . substr($digits, 1);
+        }
+
+        return $digits ?: null;
+    }
+
+    protected function buildWhatsappLink(Product $product, array $data, ?string $packageLabel = null): string
+    {
+        $number = $this->sanitizePhoneNumber(Setting::get('contact_phone'));
+        $siteName = Setting::get('site_name', 'Kami');
+ 
+        $lines = [
+            "Halo *{$siteName}*, saya ingin mengajukan reservasi mobil:",
+            '',
+            "Mobil: *{$product->name}*",
+            "Tanggal: {$data['start_date']} s/d {$data['end_date']}",
+        ];
+ 
+        if ($packageLabel) {
+            $lines[] = "📦 Paket: {$packageLabel}";
+        }
+ 
+        $lines[] = ! empty($data['with_driver'])
+            ? 'Layanan Sopir: Ya'
+            : 'Layanan: Lepas Kunci';
+ 
+        $lines = array_merge($lines, [
+            '',
+            "Nama: {$data['customer_name']}",
+            "No HP: {$data['customer_phone']}",
+        ]);
+ 
         if (! empty($data['notes'])) {
             $lines[] = "Catatan: {$data['notes']}";
         }
-
-        $message = implode("\n", $lines);
-
-        return "https://wa.me/{$number}?text=" . urlencode($message);
+ 
+        $lines[] = '';
+        $lines[] = 'Mohon informasi ketersediaan dan konfirmasinya. Terima kasih.';
+ 
+        $message = collect($lines)->implode("\n");
+ 
+        return $number
+            ? "https://wa.me/{$number}?text=" . urlencode($message)
+            : '';
     }
+
+
+    public function payNow(Request $request, DokuCheckoutService $doku)
+    {
+        $validator = Validator::make($request->all(), [
+            'product_id' => 'required|exists:products,id',
+            'package_id' => 'nullable|exists:packages,id',
+            'start_date' => 'required|date|after_or_equal:today',
+            'end_date' => 'required|date|after_or_equal:start_date',
+            'with_driver' => 'boolean',
+            'customer_name' => 'required|string|max:255',
+            'customer_phone' => 'required|string|max:50',
+            'customer_email' => 'required|email|max:255',
+            'notes' => 'nullable|string|max:1000',
+        ]);
+    
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+    
+        $data = $validator->validated();
+        $product = Product::findOrFail($data['product_id']);
+    
+        // Sama seperti store(): butuh unit fisik yang kosong di rentang tanggal
+        $unit = $this->findAvailableUnit($product->id, $data['start_date'], $data['end_date']);
+    
+        if (! $unit) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Mohon maaf, semua unit sudah penuh di tanggal yang dipilih. Silakan pilih tanggal lain.',
+            ], 422);
+        }
+    
+        [$packageLabel, $packagePrice, $package] = $this->resolvePackage($product->id, $data['package_id'] ?? null);
+    
+        $startDate = \Carbon\Carbon::parse($data['start_date']);
+        $endDate = $this->calculateEndDate($startDate, $package);
+    
+        $withDriver = (bool) ($data['with_driver'] ?? false);
+        $driverFee = 0;
+    
+        if ($withDriver) {
+            $driverFee = $package?->effective_driver_fee ?? (int) Setting::get('driver_surcharge', 0);
+        }
+    
+        // Sesuai accessor getTotalPriceAttribute(): package_price + driver_surcharge_price (+ delivery, tidak dipakai di alur ini)
+        $grossAmount = (int) $packagePrice + ($withDriver ? $driverFee : 0);
+        $invoiceNumber = 'INV-' . now()->format('Ymd') . '-' . strtoupper(Str::random(6));
+        $paymentDueMinutes = 60;
+    
+        // Simpan booking dulu dengan status "pending" SEBELUM hit Doku -- ini
+        // sudah otomatis nge-block unit karena scopeOverlapping() include status
+        // 'pending' pada daftar status yang dianggap "terpakai".
+        $booking = Booking::create([
+            'product_unit_id' => $unit->id,
+            'start_date' => $data['start_date'],
+            'end_date' => $endDate->toDateString(),
+            'package_id' => $data['package_id'] ?? null,
+            'package_label' => $packageLabel,
+            'package_price' => $packagePrice,
+            'with_driver' => $withDriver,
+            'driver_surcharge_price' => $withDriver ? $driverFee : 0,
+            'status' => 'pending',
+            'customer_name' => $data['customer_name'],
+            'customer_phone' => $data['customer_phone'],
+            'notes' => $data['notes'] ?? null,
+            'source' => 'payment_gateway',
+            // kolom gateway yang sudah ada di model:
+            'payment_gateway' => 'doku',
+            'gateway_order_id' => $invoiceNumber,
+            'gross_amount' => $grossAmount,
+            'expired_at' => now()->addMinutes($paymentDueMinutes),
+        ]);
+    
+        $result = $doku->createPayment(
+            order: [
+                'amount' => $grossAmount,
+                'invoice_number' => $invoiceNumber,
+                'payment_due_date' => $paymentDueMinutes,
+                'line_items' => [[
+                    'name' => $product->name . ($packageLabel ? " ({$packageLabel})" : ''),
+                    'price' => $grossAmount,
+                    'quantity' => 1,
+                ]],
+            ],
+            customer: [
+                'name' => $data['customer_name'],
+                'email' => $data['customer_email'],
+                'phone' => $data['customer_phone'],
+            ],
+            callbackUrl: rtrim(config('app.frontend_url'), '/') . '/reservasi/selesai?booking=' . $booking->id,
+        );
+    
+        if (! $result['success']) {
+            // Gagal generate link pembayaran -> jangan tinggalkan booking nyangkut,
+            // batalkan supaya unit kembali tersedia untuk customer lain.
+            $booking->update(['status' => 'cancelled']);
+    
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'] ?? 'Gagal membuat link pembayaran. Coba lagi.',
+            ], 502);
+        }
+    
+        $booking->update([
+            'payment_redirect_url' => $result['payment_url'],
+            'gateway_status' => 'pending',
+        ]);
+    
+        return response()->json([
+            'success' => true,
+            'saved' => true,
+            'booking' => new BookingResource($booking->load('unit.product')),
+            'payment_url' => $result['payment_url'],
+        ]);
+    }
+
+
 }

@@ -16,6 +16,8 @@ class ProductController extends Controller
         $request->validate([
             'available_from' => 'nullable|date',
             'available_to' => 'nullable|date|after_or_equal:available_from',
+            'fuel_type' => 'nullable|string|in:bensin,diesel,listrik,hybrid',
+            'seat_capacity' => 'nullable|integer|min:1',
         ]);
 
         $query = Product::query()
@@ -52,6 +54,23 @@ class ProductController extends Controller
                             ->where('end_date', '>=', $from);
                     });
             });
+        }
+        // Filter rentang harga
+        if ($request->filled('min_price') || $request->filled('max_price')) {
+            $min = (float) $request->get('min_price', 0);
+            $max = (float) $request->get('max_price', PHP_INT_MAX);
+ 
+            $query->whereHas('packages', function ($packageQuery) use ($min, $max) {
+                $packageQuery->whereBetween('price', [$min, $max]);
+            });
+        }
+
+        if ($request->filled('fuel_type')) {
+            $query->where('fuel_type', $request->fuel_type);
+        }
+
+        if ($request->filled('seat_capacity')) {
+            $query->where('seat_capacity', '>=', (int) $request->seat_capacity);
         }
 
         $perPage = (int) $request->get('per_page', 12);
@@ -95,7 +114,7 @@ class ProductController extends Controller
 
         $unitIds = $product->units()->active()->pluck('id');
 
-        // Gak ada unit aktif sama sekali -> semua tanggal dianggap gak tersedia
+        // Gak ada unit aktif sama sekali semua tanggal dianggap gak tersedia
         if ($unitIds->isEmpty()) {
             $allDates = collect(CarbonPeriod::create($from, $to))
                 ->map(fn ($date) => \Carbon\Carbon::parse((string) $date)->toDateString())

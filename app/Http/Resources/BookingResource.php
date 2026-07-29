@@ -12,6 +12,7 @@ class BookingResource extends JsonResource
         return [
             'id' => $this->id,
             'status' => $this->status,
+            'cancel_token' => $this->cancel_token,
             'start_date' => $this->start_date?->toDateString(),
             'end_date' => $this->end_date?->toDateString(),
             'package_label' => $this->package_label,

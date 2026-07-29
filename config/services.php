@@ -34,5 +34,14 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    'doku' => [
+        'is_production' => env('DOKU_IS_PRODUCTION', false),
+        'client_id' => env('DOKU_CLIENT_ID'),
+        'secret_key' => env('DOKU_SECRET_KEY'),
+        'base_url' => env('DOKU_IS_PRODUCTION', false)
+            ? 'https://api.doku.com'
+            : 'https://api-sandbox.doku.com',
+    ],
+
 
 ];

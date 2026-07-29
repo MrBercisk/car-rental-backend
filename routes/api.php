@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function () {
 
     // setting
-    Route::get('/settings', SettingController::class . '@index')->name('settings.index');
+    Route::get('/settings', [SettingController::class . 'index'])->name('settings.index');
 
     // banners
     Route::get('/banners', [BannerController::class, 'index'])->name('banners.index');
@@ -32,14 +32,17 @@ Route::prefix('v1')->group(function () {
         ->where('slug', '[a-z0-9\-]+')
         ->name('products.show');
 
-    Route::get('/products/{slug}/availability', [ProductController::class, 'availability']);
+    Route::get('/products/{slug}/availability', [ProductController::class, 'availability'])
+    ->where('slug', '[a-z0-9\-]+');
  
-
     // boooking
     Route::get('/booking-config', [BookingController::class, 'config']);
-    Route::post('/bookings', [BookingController::class, 'store']);
-    
+    Route::post('/bookings', [BookingController::class, 'store'])
+        ->middleware('throttle:booking-submit');
 
+
+    Route::post('/bookings/{booking}/cancel', [BookingController::class, 'cancel'])
+    ->middleware('throttle:booking-cancel');
     // kontak
     Route::post('/contact', [ContactController::class, 'store'])
         ->middleware('throttle:contact')

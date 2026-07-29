@@ -122,6 +122,43 @@ class BookingController extends Controller
             'whatsapp_link' => $this->buildWhatsappLink($product, $data),
         ]);
     }
+
+    /* cancel booking dari customer pakai cancel token yang direturn pas booking berhasil dibuat */
+
+    public function cancel(Request $request, Booking $booking)
+    {
+        $validator = Validator::make($request->all(), [
+            'cancel_token' => 'required|string',
+        ]);
+ 
+        if ($validator->fails()) {
+            return response()->json(['success' => false, 'errors' => $validator->errors()], 422);
+        }
+ 
+        if (! $booking->cancel_token || ! hash_equals($booking->cancel_token, $request->cancel_token)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Token tidak valid.',
+            ], 403);
+        }
+ 
+        if (! $booking->isCancellableByCustomer()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking ini tidak bisa dibatalkan otomatis (sudah lunas/dikonfirmasi/di-lock). Silakan hubungi kami langsung.',
+            ], 422);
+        }
+ 
+        $booking->update(['status' => 'cancelled']);
+ 
+        return response()->json([
+            'success' => true,
+            'message' => 'Booking berhasil dibatalkan.',
+        ]);
+    }
+ 
+
+
     protected function calculateEndDate(\Carbon\Carbon $startDate, ?\App\Models\Package $package): \Carbon\Carbon
     {
         if (! $package) {

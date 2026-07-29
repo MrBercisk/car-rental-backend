@@ -30,6 +30,17 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinutes(10, 3)->by($key);
         });
 
+        // batas limit per ip untuk book per jam 5
+        RateLimiter::for('booking-submit', function(Request $request) {
+            return Limit::perHour(5)->by($request->ip());
+        });
+
+        // batas limit per ip untuk book per jam 5
+        RateLimiter::for('booking-cancel', function (Request $request) {
+            return Limit::perHour(5)->by($request->ip());
+        });
+
+
         Booking::observe(BookingObserver::class);
     }
 }

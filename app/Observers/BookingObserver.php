@@ -8,12 +8,8 @@ use Illuminate\Support\Facades\Notification;
 
 class BookingObserver
 {
-    /**
-     * Notifikasi admin CUMA dipicu untuk booking dari 'form' (customer isi
-     * sendiri di website, tanpa admin tau duluan). Booking dengan source
-     * 'admin'/'whatsapp'/'maintenance' TIDAK memicu notifikasi -- karena
-     * itu dibuat/diketahui admin sendiri.
-     */
+   
+    /* notiifkasi email cuma dari form user */
     public function created(Booking $booking): void
     {
         if ($booking->source !== 'form') {
@@ -24,7 +20,7 @@ class BookingObserver
             Notification::route('mail', config('notifications.admin_email'))
                 ->notify(new NewBookingNotification($booking));
         } catch (\Throwable $e) {
-            // Gagal kirim notifikasi TIDAK BOLEH bikin proses booking ikut gagal.
+            // Gagal kirim notifikasi tidak bikin proses booking ikut gagal.
             report($e);
         }
     }

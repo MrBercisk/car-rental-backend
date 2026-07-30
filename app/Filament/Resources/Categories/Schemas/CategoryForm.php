@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\Categories\Schemas;
 
-use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
@@ -30,13 +29,6 @@ class CategoryForm
             Textarea::make('description')
                 ->label('Deskripsi')
                 ->rows(3)
-                ->columnSpanFull(),
-
-            FileUpload::make('image')
-                ->label('Gambar Kategori')
-                ->image()
-                ->directory('categories')
-                ->imageEditor()
                 ->columnSpanFull(),
 
             TextInput::make('sort_order')

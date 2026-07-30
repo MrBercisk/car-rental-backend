@@ -9,7 +9,7 @@ use App\Models\Product;
 use App\Models\CarPackage;
 use App\Models\ProductUnit;
 use App\Models\Setting;
-use App\Services\DokuCheckoutService;
+use App\Services\PaymentGatewayManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -29,9 +29,15 @@ class BookingController extends Controller
     }
 
     /**
-     * Submit booking dari frontend publik.
-     *
-     * POST /api/bookings
+     * Get data booking by ID
+     */
+    public function show(Booking $booking)
+    {
+        return response()->json(new BookingResource($booking->load('unit.product', 'payments')));
+    }
+
+    /**
+     * Submit booking dari frontend
      */
     public function store(Request $request)
     {
@@ -264,12 +270,16 @@ class BookingController extends Controller
             : '';
     }
 
-
-    public function payNow(Request $request, DokuCheckoutService $doku)
+    /**
+     * Bikin booking + link pembayaran online.
+     * semua lewat interface PaymentGateway,
+     * tinggal ganti payment_gateway=midtrans kalau ganti gateway
+     */
+    public function payNow(Request $request, PaymentGatewayManager $gatewayManager)
     {
         $validator = Validator::make($request->all(), [
             'product_id' => 'required|exists:products,id',
-            'package_id' => 'nullable|exists:packages,id',
+            'package_id' => 'required|exists:packages,id',
             'start_date' => 'required|date|after_or_equal:today',
             'end_date' => 'required|date|after_or_equal:start_date',
             'with_driver' => 'boolean',
@@ -277,6 +287,7 @@ class BookingController extends Controller
             'customer_phone' => 'required|string|max:50',
             'customer_email' => 'required|email|max:255',
             'notes' => 'nullable|string|max:1000',
+            'payment_gateway' => 'nullable|string|max:50', // doku, midtrans atau lainnya
         ]);
     
         if ($validator->fails()) {
@@ -288,8 +299,9 @@ class BookingController extends Controller
     
         $data = $validator->validated();
         $product = Product::findOrFail($data['product_id']);
+        $selectedGateway = $data['payment_gateway'] ?? config('services.payment_gateways.default', 'doku');
     
-        // Sama seperti store(): butuh unit fisik yang kosong di rentang tanggal
+        // validasi unit fisik kosong di rentang tanggal
         $unit = $this->findAvailableUnit($product->id, $data['start_date'], $data['end_date']);
     
         if (! $unit) {
@@ -311,14 +323,12 @@ class BookingController extends Controller
             $driverFee = $package?->effective_driver_fee ?? (int) Setting::get('driver_surcharge', 0);
         }
     
-        // Sesuai accessor getTotalPriceAttribute(): package_price + driver_surcharge_price (+ delivery, tidak dipakai di alur ini)
+        // Sesuai getTotalPriceAttribute(): package_price + driver_surcharge_price 
         $grossAmount = (int) $packagePrice + ($withDriver ? $driverFee : 0);
         $invoiceNumber = 'INV-' . now()->format('Ymd') . '-' . strtoupper(Str::random(6));
         $paymentDueMinutes = 60;
     
-        // Simpan booking dulu dengan status "pending" SEBELUM hit Doku -- ini
-        // sudah otomatis nge-block unit karena scopeOverlapping() include status
-        // 'pending' pada daftar status yang dianggap "terpakai".
+        // simpan booking dulu, kalau gateway gagal nanti di-cancel lagi di bawah
         $booking = Booking::create([
             'product_unit_id' => $unit->id,
             'start_date' => $data['start_date'],
@@ -333,14 +343,17 @@ class BookingController extends Controller
             'customer_phone' => $data['customer_phone'],
             'notes' => $data['notes'] ?? null,
             'source' => 'payment_gateway',
-            // kolom gateway yang sudah ada di model:
-            'payment_gateway' => 'doku',
+            'payment_gateway' => $selectedGateway,
             'gateway_order_id' => $invoiceNumber,
             'gross_amount' => $grossAmount,
             'expired_at' => now()->addMinutes($paymentDueMinutes),
         ]);
     
-        $result = $doku->createPayment(
+        $gateway = $gatewayManager->resolve($selectedGateway);
+
+        // apping ke format tiap gateway
+        // dilakukan di dalam masing-masing *CheckoutService
+        $result = $gateway->createPayment(
             order: [
                 'amount' => $grossAmount,
                 'invoice_number' => $invoiceNumber,
@@ -360,8 +373,7 @@ class BookingController extends Controller
         );
     
         if (! $result['success']) {
-            // Gagal generate link pembayaran -> jangan tinggalkan booking nyangkut,
-            // batalkan supaya unit kembali tersedia untuk customer lain.
+            // gagal generate link cancel booking biar kosong unit nya ga nyangkut
             $booking->update(['status' => 'cancelled']);
     
             return response()->json([
@@ -372,7 +384,7 @@ class BookingController extends Controller
     
         $booking->update([
             'payment_redirect_url' => $result['payment_url'],
-            'gateway_status' => 'pending',
+            'gateway_status' => 'PENDING',
         ]);
     
         return response()->json([
@@ -382,6 +394,5 @@ class BookingController extends Controller
             'payment_url' => $result['payment_url'],
         ]);
     }
-
 
 }

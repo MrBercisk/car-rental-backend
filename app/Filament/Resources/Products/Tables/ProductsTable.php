@@ -31,6 +31,8 @@ class ProductsTable
     public static function configure(Table $table): Table
     {
         return $table
+            // hitung units & packages sekali lewat query, dipakai kolom badge di bawah
+            ->modifyQueryUsing(fn (Builder $query) => $query->withCount(['units', 'packages']))
             ->columns([
                 ImageColumn::make('images')
                     ->label('Foto')
@@ -65,6 +67,22 @@ class ProductsTable
                 TextColumn::make('seat_capacity')
                     ->label('Kursi')
                     ->suffix(' org')
+                    ->sortable(),
+
+                // tandai mobil yang belum punya unit fisik sama sekali (bisa ke-booking tapi gak bakal ada mobilnya)
+                TextColumn::make('units_count')
+                    ->label('Unit')
+                    ->badge()
+                    ->formatStateUsing(fn (int $state) => $state > 0 ? $state . ' unit' : 'Belum ada unit')
+                    ->color(fn (int $state) => $state > 0 ? 'success' : 'danger')
+                    ->sortable(),
+
+                // tandai mobil yang belum punya paket harga sama sekali (gak bisa di-booking sampai ada paket)
+                TextColumn::make('packages_count')
+                    ->label('Paket')
+                    ->badge()
+                    ->formatStateUsing(fn (int $state) => $state > 0 ? $state . ' paket' : 'Belum ada paket')
+                    ->color(fn (int $state) => $state > 0 ? 'success' : 'danger')
                     ->sortable(),
 
                 IconColumn::make('is_available')
@@ -207,6 +225,30 @@ class ProductsTable
                     ->queries(
                         true: fn (Builder $query) => $query->whereHas('units', fn ($q) => $q->where('condition_status', 'active')),
                         false: fn (Builder $query) => $query->whereDoesntHave('units', fn ($q) => $q->where('condition_status', 'active')),
+                        blank: fn (Builder $query) => $query,
+                    ),
+
+                // Filter cepat buat cari mobil yang sama sekali belum punya unit fisik
+                TernaryFilter::make('has_any_unit')
+                    ->label('Punya Unit (Apapun Kondisinya)')
+                    ->placeholder('Semua')
+                    ->trueLabel('Ada Unit')
+                    ->falseLabel('Belum Ada Unit')
+                    ->queries(
+                        true: fn (Builder $query) => $query->whereHas('units'),
+                        false: fn (Builder $query) => $query->whereDoesntHave('units'),
+                        blank: fn (Builder $query) => $query,
+                    ),
+
+                // Filter cepat buat cari mobil yang belum punya paket harga
+                TernaryFilter::make('has_any_package')
+                    ->label('Punya Paket Harga')
+                    ->placeholder('Semua')
+                    ->trueLabel('Ada Paket')
+                    ->falseLabel('Belum Ada Paket')
+                    ->queries(
+                        true: fn (Builder $query) => $query->whereHas('packages'),
+                        false: fn (Builder $query) => $query->whereDoesntHave('packages'),
                         blank: fn (Builder $query) => $query,
                     ),
 

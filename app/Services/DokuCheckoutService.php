@@ -2,22 +2,22 @@
 
 namespace App\Services;
 
+use App\Contracts\PaymentGateway;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
- * Wrapper untuk DOKU Checkout API.
- * Referensi resmi: https://developers.doku.com/accept-payments/doku-checkout
+ * Wrapper DOKU Checkout API.
+ * Docs: https://developers.doku.com/accept-payments/doku-checkout
  *
- * Alur:
- * 1. createPayment() -> POST /checkout/v1/payment -> dapat payment_url,
- *    frontend redirect penuh customer ke payment_url tersebut.
- * 2. Setelah customer bayar, Doku kirim HTTP notification (webhook) ke
- *    Notification URL yang didaftarkan di Doku Dashboard -- verifikasi
- *    pakai verifyNotificationSignature().
+ * Flow:
+ * 1. createPayment() -> POST /checkout/v1/payment -> dapat payment_url
+ * 2. Redirect customer ke payment_url
+ * 3. DOKU kirim webhook ke Notification URL -> verifikasi pakai verifyNotificationSignature()
  */
-class DokuCheckoutService
+class DokuCheckoutService implements PaymentGateway
 {
     protected string $baseUrl;
     protected string $clientId;
@@ -30,8 +30,15 @@ class DokuCheckoutService
         $this->secretKey = config('services.doku.secret_key');
     }
 
+    public function getName(): string
+    {
+        return 'doku';
+    }
+
     /**
-     * Buat payment link di DOKU Checkout
+     * Bikin payment link DOKU Checkout.
+     * payment_method_types dikunci ke VIRTUAL_ACCOUNT_BCA saja,
+     * jadi customer cuma lihat opsi BCA VA di halaman checkout.
      */
     public function createPayment(array $order, array $customer, ?string $callbackUrl = null): array
     {
@@ -49,6 +56,7 @@ class DokuCheckoutService
             ], fn ($v) => $v !== null),
             'payment' => [
                 'payment_due_date' => $order['payment_due_date'] ?? 60, // menit
+                'payment_method_types' => ['VIRTUAL_ACCOUNT_BCA'], // batasi hanya BCA VA
             ],
             'customer' => array_filter([
                 'name' => $customer['name'],
@@ -94,7 +102,40 @@ class DokuCheckoutService
         ];
     }
 
-    /** header Signature untuk request ke Doku (dipakai createPayment). */
+    // Cek signature webhook dari DOKU biar gak dipalsuin orang lain
+    public function verifyNotificationSignature(Request $request): bool
+    {
+        return $this->verifySignature(
+            clientId: $request->header('Client-Id', ''),
+            requestId: $request->header('Request-Id', ''),
+            timestamp: $request->header('Request-Timestamp', ''),
+            requestTarget: '/api/v1/doku/notification',
+            rawBody: $request->getContent(),
+            signatureHeader: $request->header('Signature', ''),
+        );
+    }
+
+    // Parse payload webhook jadi array yang gampang dipakai
+    public function handleNotification(Request $request): array
+    {
+        $rawBody = $request->getContent();
+        $payload = json_decode($rawBody, true) ?? [];
+        $invoiceNumber = data_get($payload, 'order.invoice_number');
+        $transactionId = data_get($payload, 'transaction.id') ?? data_get($payload, 'transaction.original_request_id');
+        $transactionStatus = strtoupper((string) data_get($payload, 'transaction.status'));
+        $paymentMethod = data_get($payload, 'channel.id') ?? data_get($payload, 'payment.payment_method_types.0');
+
+        return [
+            'invoice_number' => $invoiceNumber,
+            'transaction_id' => $transactionId,
+            'transaction_status' => $transactionStatus,
+            'payment_method' => $paymentMethod,
+            'payload' => $payload,
+            'raw_body' => $rawBody,
+        ];
+    }
+
+    // Bikin signature buat request ke DOKU (dipakai createPayment)
     protected function buildRequestSignature(string $requestId, string $requestTimestamp, string $requestTarget, string $jsonBody): string
     {
         $digest = base64_encode(hash('sha256', $jsonBody, true));
@@ -110,12 +151,8 @@ class DokuCheckoutService
         );
     }
 
-    /**
-     * Verifikasi signature notifikasi/webhook yang dikirim Doku ke server
-     * $requestTarget = path Notification URL yang didaftarkan di Doku Dashboard
-     * (misal '/api/doku/notification').
-     */
-    public function verifyNotificationSignature(
+    // Verifikasi signature webhook masuk, bandingin sama signature yang kita hitung sendiri
+    protected function verifySignature(
         string $clientId,
         string $requestId,
         string $timestamp,

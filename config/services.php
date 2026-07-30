@@ -43,5 +43,12 @@ return [
             : 'https://api-sandbox.doku.com',
     ],
 
+    'payment_gateways' => [
+        'default' => env('PAYMENT_GATEWAY_DEFAULT', 'doku'),
+        'doku' => [
+            'driver' => 'doku',
+            'class' => App\Services\DokuCheckoutService::class,
+        ],
+    ],
 
 ];

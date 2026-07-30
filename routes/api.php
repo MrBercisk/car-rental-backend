@@ -46,7 +46,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/booking-config', [BookingController::class, 'config']);
     Route::post('/bookings', [BookingController::class, 'store'])
         ->middleware('throttle:booking-submit');
-
+    Route::get('/bookings/{booking}', [BookingController::class, 'show']);
 
     Route::post('/bookings/{booking}/cancel', [BookingController::class, 'cancel'])
     ->middleware('throttle:booking-cancel');

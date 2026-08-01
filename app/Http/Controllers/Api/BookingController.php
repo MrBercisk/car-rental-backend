@@ -36,6 +36,23 @@ class BookingController extends Controller
         return response()->json(new BookingResource($booking->load('unit.product', 'payments')));
     }
 
+    /* get data booking by invoice number */
+    public function showByInvoice(string $invoiceNumber)
+    {
+        $booking = Booking::where('gateway_order_id', $invoiceNumber)
+            ->with('unit.product', 'payments')
+            ->first();
+ 
+        if (! $booking) {
+            return response()->json([
+                'message' => 'Booking dengan nomor invoice tersebut tidak ditemukan.',
+            ], 404);
+        }
+ 
+        return response()->json(new BookingResource($booking));
+    }
+ 
+
     /**
      * Submit booking dari frontend
      */
@@ -50,6 +67,8 @@ class BookingController extends Controller
             'customer_name' => 'required|string|max:255',
             'customer_phone' => 'required|string|max:50',
             'notes' => 'nullable|string|max:1000',
+            'delivery_address' => 'nullable|string|max:255',
+            'delivery_distance_km' => 'nullable|numeric|min:0',
         ]);
 
         if ($validator->fails()) {
@@ -76,7 +95,7 @@ class BookingController extends Controller
             || ($mode === 'whatsapp_form' && config('booking.save_on_form_submit'));
 
         // mode whatsapp form cuma gerneate link ga submit ke db
-        if (! $shouldSave) {
+        if (!$shouldSave) {
             return response()->json([
                 'success' => true,
                 'saved' => false,
@@ -107,6 +126,9 @@ class BookingController extends Controller
             $driverFee = $package?->effective_driver_fee ?? (int) Setting::get('driver_surcharge', 0);
         }
 
+        $deliveryDistance = (float) ($data['delivery_distance_km'] ?? 0);
+        $deliveryFee = $this->calculateDeliveryFee($deliveryDistance);
+
         $booking = Booking::create([
             'product_unit_id' => $unit->id,
             'start_date' => $data['start_date'],
@@ -116,6 +138,9 @@ class BookingController extends Controller
             'package_price' => $packagePrice,
             'with_driver' => $withDriver,
             'driver_surcharge_price' => $withDriver ? $driverFee : 0,
+            'delivery_address' => $data['delivery_address'] ?? null,
+            'delivery_distance_km' => $deliveryDistance > 0 ? $deliveryDistance : null,
+            'delivery_fee_price' => $deliveryFee,
             'status' => 'pending',
             'customer_name' => $data['customer_name'],
             'customer_phone' => $data['customer_phone'],
@@ -180,6 +205,15 @@ class BookingController extends Controller
         };
     }
 
+    protected function calculateDeliveryFee(float $distanceKm): int
+    {
+        return match (true) {
+            $distanceKm <= 10 => 0,
+            $distanceKm <= 20 => 50000,
+            default => (int) round($distanceKm * 5000),
+        };
+    }
+
     /* cari unit yang aktif dan kosong termasuk blokir servis di tanggal filter sort order dari terkecil */
     protected function findAvailableUnit(int $productId, string $start, string $end): ?ProductUnit
     {
@@ -241,6 +275,14 @@ class BookingController extends Controller
             "Mobil: *{$product->name}*",
             "Tanggal: {$data['start_date']} s/d {$data['end_date']}",
         ];
+
+        if (! empty($data['delivery_address'])) {
+            $lines[] = "Alamat Antar: {$data['delivery_address']}";
+        }
+
+        if (! empty($data['delivery_distance_km'])) {
+            $lines[] = "Jarak Antar: {$data['delivery_distance_km']} km";
+        }
  
         if ($packageLabel) {
             $lines[] = "📦 Paket: {$packageLabel}";
@@ -288,6 +330,8 @@ class BookingController extends Controller
             'customer_email' => 'required|email|max:255',
             'notes' => 'nullable|string|max:1000',
             'payment_gateway' => 'nullable|string|max:50', // doku, midtrans atau lainnya
+            'delivery_address' => 'nullable|string|max:255',
+            'delivery_distance_km' => 'nullable|numeric|min:0',
         ]);
     
         if ($validator->fails()) {
@@ -322,9 +366,12 @@ class BookingController extends Controller
         if ($withDriver) {
             $driverFee = $package?->effective_driver_fee ?? (int) Setting::get('driver_surcharge', 0);
         }
+
+        $deliveryDistance = (float) ($data['delivery_distance_km'] ?? 0);
+        $deliveryFee = $this->calculateDeliveryFee($deliveryDistance);
     
-        // Sesuai getTotalPriceAttribute(): package_price + driver_surcharge_price 
-        $grossAmount = (int) $packagePrice + ($withDriver ? $driverFee : 0);
+        // Sesuai getTotalPriceAttribute(): package_price + driver_surcharge_price + delivery_fee_price
+        $grossAmount = (int) $packagePrice + ($withDriver ? $driverFee : 0) + $deliveryFee;
         $invoiceNumber = 'INV-' . now()->format('Ymd') . '-' . strtoupper(Str::random(6));
         $paymentDueMinutes = 60;
     
@@ -338,6 +385,9 @@ class BookingController extends Controller
             'package_price' => $packagePrice,
             'with_driver' => $withDriver,
             'driver_surcharge_price' => $withDriver ? $driverFee : 0,
+            'delivery_address' => $data['delivery_address'] ?? null,
+            'delivery_distance_km' => $deliveryDistance > 0 ? $deliveryDistance : null,
+            'delivery_fee_price' => $deliveryFee,
             'status' => 'pending',
             'customer_name' => $data['customer_name'],
             'customer_phone' => $data['customer_phone'],
@@ -351,23 +401,65 @@ class BookingController extends Controller
     
         $gateway = $gatewayManager->resolve($selectedGateway);
 
-        // apping ke format tiap gateway
+        $lineItems = [];
+        $baseItemName = trim("Reservasi {$product->name} - {$data['start_date']} s/d {$data['end_date']}");
+
+        if ((int) $packagePrice > 0 || $packageLabel) {
+            $lineItems[] = [
+                'name' => $packageLabel
+                    ? $baseItemName . " ({$packageLabel})"
+                    : $baseItemName,
+                'price' => (int) $packagePrice,
+                'quantity' => 1,
+            ];
+        } elseif ($grossAmount > 0) {
+            $lineItems[] = [
+                'name' => $baseItemName,
+                'price' => $grossAmount,
+                'quantity' => 1,
+            ];
+        }
+
+        if ($withDriver && $driverFee > 0) {
+            $lineItems[] = [
+                'name' => 'Biaya Supir',
+                'price' => $driverFee,
+                'quantity' => 1,
+            ];
+        }
+
+        if ($deliveryFee > 0 || ! empty($data['delivery_address'])) {
+            $deliveryLabel = 'Biaya Antar Jemput';
+
+            if (! empty($data['delivery_distance_km'])) {
+                $deliveryLabel .= " ({$deliveryDistance} km)";
+            }
+
+            if (! empty($data['delivery_address'])) {
+                $deliveryLabel .= " - {$data['delivery_address']}";
+            }
+
+            $lineItems[] = [
+                'name' => $deliveryLabel,
+                'price' => $deliveryFee,
+                'quantity' => 1,
+            ];
+        }
+
+        // mapping ke format tiap gateway
         // dilakukan di dalam masing-masing *CheckoutService
         $result = $gateway->createPayment(
             order: [
                 'amount' => $grossAmount,
                 'invoice_number' => $invoiceNumber,
                 'payment_due_date' => $paymentDueMinutes,
-                'line_items' => [[
-                    'name' => $product->name . ($packageLabel ? " ({$packageLabel})" : ''),
-                    'price' => $grossAmount,
-                    'quantity' => 1,
-                ]],
+                'line_items' => $lineItems,
             ],
             customer: [
                 'name' => $data['customer_name'],
                 'email' => $data['customer_email'],
                 'phone' => $data['customer_phone'],
+                'address' => $data['delivery_address'] ?? null,
             ],
             callbackUrl: rtrim(config('app.frontend_url'), '/') . '/reservasi/selesai?booking=' . $booking->id,
         );

@@ -81,7 +81,7 @@ class DokuNotificationController extends Controller
             $alreadyRecorded = $transactionId
                 && $booking->payments()->where('gateway_transaction_id', $transactionId)->exists();
 
-            if (! $alreadyRecorded) {
+            if (!$alreadyRecorded) {
                 $booking->payments()->create([
                     'amount' => $booking->gross_amount ?? $booking->total_price,
                     'type' => 'pelunasan',
@@ -91,6 +91,10 @@ class DokuNotificationController extends Controller
                     'gateway_transaction_id' => $transactionId,
                 ]);
             }
+
+            $booking->update([
+                'paid_at' => now()
+            ]);
 
             // Kalau payment_status_enabled mati (jadi recalculateAmountPaid tidak otomatis ubah status),
             // pastikan tetap jadi confirmed karena pelunasan penuh gateway bukan dp

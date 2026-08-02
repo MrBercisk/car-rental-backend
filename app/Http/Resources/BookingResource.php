@@ -16,6 +16,7 @@ class BookingResource extends JsonResource
             'invoice_number' => $this->gateway_order_id,
             'payment_gateway' => $this->payment_gateway,
             'gateway_status' => $this->gateway_status,
+            'gateway_payment_method' => $this->gateway_payment_method,
             'gross_amount' => (float) ($this->gross_amount ?? 0),
             'expired_at' => $this->expired_at?->toIso8601String(),
             'start_date' => $this->start_date?->toDateString(),
@@ -37,7 +38,9 @@ class BookingResource extends JsonResource
                     'id' => $this->unit?->product?->id,
                     'name' => $this->unit?->product?->name,
                     'slug' => $this->unit?->product?->slug,
-                    'thumbnail' => $this->unit?->product?->thumbnail
+                    'thumbnail' => $this->unit?->product?->thumbnail,
+                    'license_plate' => $this->unit?->license_plate,
+                    'color' => $this->unit?->color
                 ];
             }),
             'created_at' => $this->created_at?->toIso8601String(),

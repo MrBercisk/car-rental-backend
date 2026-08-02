@@ -264,6 +264,32 @@ class BookingController extends Controller
         return $digits ?: null;
     }
 
+    /**
+     * Bersihkan string yang akan dikirim ke payment gateway (DOKU),
+     * hanya izinkan karakter yang diterima oleh validator DOKU:
+     * a-z A-Z 0-9 . - / + , = _ : ' @ % ( ) dan spasi.
+     * Whitespace berturut-turut dirapikan dan hasil akhir di-trim.
+     */
+    protected function sanitizeForGateway(?string $text, int $maxLength = 255): ?string
+    {
+        if ($text === null || $text === '') {
+            return $text;
+        }
+
+        // buang karakter yang tidak ada di whitelist DOKU
+        $clean = preg_replace("/[^a-zA-Z0-9.\-\/+,=_:'@% ()]/", '', $text);
+
+        // rapikan spasi ganda hasil dari penghapusan karakter
+        $clean = preg_replace('/\s+/', ' ', $clean);
+        $clean = trim($clean);
+
+        if ($maxLength > 0 && mb_strlen($clean) > $maxLength) {
+            $clean = mb_substr($clean, 0, $maxLength);
+        }
+
+        return $clean;
+    }
+
     protected function buildWhatsappLink(Product $product, array $data, ?string $packageLabel = null): string
     {
         $number = $this->sanitizePhoneNumber(Setting::get('contact_phone'));
@@ -285,7 +311,7 @@ class BookingController extends Controller
         }
  
         if ($packageLabel) {
-            $lines[] = "📦 Paket: {$packageLabel}";
+            $lines[] = "Paket: {$packageLabel}";
         }
  
         $lines[] = ! empty($data['with_driver'])
@@ -375,7 +401,7 @@ class BookingController extends Controller
         $invoiceNumber = 'INV-' . now()->format('Ymd') . '-' . strtoupper(Str::random(6));
         $paymentDueMinutes = 60;
     
-        // simpan booking dulu, kalau gateway gagal nanti di-cancel lagi di bawah
+        // simpan booking dulu, kalau gateway gagal nanti dicancel lagi di bawah
         $booking = Booking::create([
             'product_unit_id' => $unit->id,
             'start_date' => $data['start_date'],
@@ -390,7 +416,7 @@ class BookingController extends Controller
             'delivery_fee_price' => $deliveryFee,
             'status' => 'pending',
             'customer_name' => $data['customer_name'],
-            'customer_phone' => $data['customer_phone'],
+            'customer_phone' => $this->sanitizePhoneNumber($data['customer_phone']),
             'notes' => $data['notes'] ?? null,
             'source' => 'payment_gateway',
             'payment_gateway' => $selectedGateway,
@@ -404,20 +430,28 @@ class BookingController extends Controller
         $lineItems = [];
         $baseItemName = trim("Reservasi {$product->name} - {$data['start_date']} s/d {$data['end_date']}");
 
+        if (! empty($unit->license_plate)) {
+            $baseItemName .= " ({$unit->license_plate})";
+        }
+
         if ((int) $packagePrice > 0 || $packageLabel) {
-            $lineItems[] = [
-                'name' => $packageLabel
-                    ? $baseItemName . " ({$packageLabel})"
-                    : $baseItemName,
+            $lineItems[] = array_filter([
+                'name' => $this->sanitizeForGateway(
+                    $packageLabel
+                        ? $baseItemName . " ({$packageLabel})"
+                        : $baseItemName
+                ),
                 'price' => (int) $packagePrice,
                 'quantity' => 1,
-            ];
+                'sku' => $unit->license_plate ? $this->sanitizeForGateway($unit->license_plate, 50) : null,
+            ], fn ($v) => $v !== null && $v !== '');
         } elseif ($grossAmount > 0) {
-            $lineItems[] = [
-                'name' => $baseItemName,
+            $lineItems[] = array_filter([
+                'name' => $this->sanitizeForGateway($baseItemName),
                 'price' => $grossAmount,
                 'quantity' => 1,
-            ];
+                'sku' => $unit->license_plate ? $this->sanitizeForGateway($unit->license_plate, 50) : null,
+            ], fn ($v) => $v !== null && $v !== '');
         }
 
         if ($withDriver && $driverFee > 0) {
@@ -436,11 +470,11 @@ class BookingController extends Controller
             }
 
             if (! empty($data['delivery_address'])) {
-                $deliveryLabel .= " - {$data['delivery_address']}";
+                $deliveryLabel .= ' - ' . $this->sanitizeForGateway($data['delivery_address'], 150);
             }
 
             $lineItems[] = [
-                'name' => $deliveryLabel,
+                'name' => $this->sanitizeForGateway($deliveryLabel),
                 'price' => $deliveryFee,
                 'quantity' => 1,
             ];
@@ -456,10 +490,12 @@ class BookingController extends Controller
                 'line_items' => $lineItems,
             ],
             customer: [
-                'name' => $data['customer_name'],
+                'name' => $this->sanitizeForGateway($data['customer_name'], 100),
                 'email' => $data['customer_email'],
                 'phone' => $data['customer_phone'],
-                'address' => $data['delivery_address'] ?? null,
+                'address' => isset($data['delivery_address'])
+                    ? $this->sanitizeForGateway($data['delivery_address'], 200)
+                    : null,
             ],
             callbackUrl: rtrim(config('app.frontend_url'), '/') . '/reservasi/selesai?booking=' . $booking->id,
         );

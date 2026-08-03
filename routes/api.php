@@ -20,6 +20,7 @@ Route::prefix('v1')->group(function () {
 
     // testi
     Route::get('/testimonials', [TestimonialController::class, 'index'])->name('testimonials.index');
+    Route::post('/testimonials', [TestimonialController::class, 'store']);
 
     // kategori
     Route::get('/categories', [CategoryController::class, 'index'])->name('categories.index');
@@ -38,7 +39,7 @@ Route::prefix('v1')->group(function () {
  
     Route::post('/bookings/payment', [BookingController::class, 'payNow']);
     
-    // Webhook -- HARUS di luar middleware auth (Doku yang panggil, bukan browser customer)
+    // Webhook
     Route::post('/doku/notification', [DokuNotificationController::class, 'handle']);
     
 
@@ -47,6 +48,8 @@ Route::prefix('v1')->group(function () {
     Route::post('/bookings', [BookingController::class, 'store'])
         ->middleware('throttle:booking-submit');
 
+    Route::get('/bookings/invoice/{invoiceNumber}', [BookingController::class, 'showByInvoice']);
+    Route::get('/bookings/{booking}', [BookingController::class, 'show']);
 
     Route::post('/bookings/{booking}/cancel', [BookingController::class, 'cancel'])
     ->middleware('throttle:booking-cancel');

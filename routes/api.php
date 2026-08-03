@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\BannerController;
 use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ContactController;
+use App\Http\Controllers\Api\DokuNotificationController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\TestimonialController;
@@ -19,6 +20,7 @@ Route::prefix('v1')->group(function () {
 
     // testi
     Route::get('/testimonials', [TestimonialController::class, 'index'])->name('testimonials.index');
+    Route::post('/testimonials', [TestimonialController::class, 'store']);
 
     // kategori
     Route::get('/categories', [CategoryController::class, 'index'])->name('categories.index');
@@ -32,14 +34,25 @@ Route::prefix('v1')->group(function () {
         ->where('slug', '[a-z0-9\-]+')
         ->name('products.show');
 
-    Route::get('/products/{slug}/availability', [ProductController::class, 'availability']);
+    Route::get('/products/{slug}/availability', [ProductController::class, 'availability'])
+    ->where('slug', '[a-z0-9\-]+');
  
+    Route::post('/bookings/payment', [BookingController::class, 'payNow']);
+    
+    // Webhook
+    Route::post('/doku/notification', [DokuNotificationController::class, 'handle']);
+    
 
     // boooking
     Route::get('/booking-config', [BookingController::class, 'config']);
-    Route::post('/bookings', [BookingController::class, 'store']);
-    
+    Route::post('/bookings', [BookingController::class, 'store'])
+        ->middleware('throttle:booking-submit');
 
+    Route::get('/bookings/invoice/{invoiceNumber}', [BookingController::class, 'showByInvoice']);
+    Route::get('/bookings/{booking}', [BookingController::class, 'show']);
+
+    Route::post('/bookings/{booking}/cancel', [BookingController::class, 'cancel'])
+    ->middleware('throttle:booking-cancel');
     // kontak
     Route::post('/contact', [ContactController::class, 'store'])
         ->middleware('throttle:contact')

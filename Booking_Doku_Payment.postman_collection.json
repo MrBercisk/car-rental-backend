@@ -1,0 +1,339 @@
+{
+  "info": {
+    "_postman_id": "doku-payment-booking",
+    "name": "Booking Doku Payment Gateway",
+    "description": "Testing flow untuk booking dengan Doku payment gateway",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Booking Config",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Response has booking config', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('mode');",
+              "    pm.expect(jsonData).to.have.property('calendar_enabled');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{BASE_URL}}/api/v1/booking-config",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "v1", "booking-config"]
+        },
+        "description": "Get public booking configuration"
+      }
+    },
+    {
+      "name": "2. Get Products List",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var jsonData = pm.response.json();",
+              "if (jsonData.data && jsonData.data.length > 0) {",
+              "    pm.environment.set('product_id', jsonData.data[0].id);",
+              "    pm.environment.set('product_slug', jsonData.data[0].slug);",
+              "    console.log('Set product_id:', jsonData.data[0].id);",
+              "    console.log('Set product_slug:', jsonData.data[0].slug);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{BASE_URL}}/api/v1/products",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "v1", "products"]
+        },
+        "description": "Get list of available products (vehicles)"
+      }
+    },
+    {
+      "name": "3. Check Availability",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var jsonData = pm.response.json();",
+              "pm.test('Product is available', function () {",
+              "    pm.expect(jsonData.available).to.be.true;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{BASE_URL}}/api/v1/products/{{product_slug}}/availability?start_date={{START_DATE}}&end_date={{END_DATE}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "v1", "products", "{{product_slug}}", "availability"],
+          "query": [
+            {
+              "key": "start_date",
+              "value": "{{START_DATE}}"
+            },
+            {
+              "key": "end_date",
+              "value": "{{END_DATE}}"
+            }
+          ]
+        },
+        "description": "Check if product is available on specified dates"
+      }
+    },
+    {
+      "name": "4. Initiate Doku Payment",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var jsonData = pm.response.json();",
+              "pm.test('Payment initiated successfully', function () {",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData).to.have.property('payment_url');",
+              "    pm.expect(jsonData.booking).to.have.property('id');",
+              "});",
+              "if (jsonData.booking) {",
+              "    pm.environment.set('booking_id', jsonData.booking.id);",
+              "    pm.environment.set('gateway_order_id', jsonData.booking.gateway_order_id);",
+              "    pm.environment.set('payment_url', jsonData.payment_url);",
+              "    console.log('Booking ID:', jsonData.booking.id);",
+              "    console.log('Payment URL:', jsonData.payment_url);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"product_id\": {{product_id}},\n  \"package_id\": 1,\n  \"start_date\": \"{{START_DATE}}\",\n  \"end_date\": \"{{END_DATE}}\",\n  \"with_driver\": false,\n  \"customer_name\": \"John Doe\",\n  \"customer_phone\": \"081234567890\",\n  \"customer_email\": \"john.doe@example.com\",\n  \"notes\": \"Testing Doku payment via Postman\",\n  \"payment_gateway\": \"doku\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/v1/bookings/payment",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "v1", "bookings", "payment"]
+        },
+        "description": "Initiate payment with Doku payment gateway"
+      }
+    },
+    {
+      "name": "5. Simulate Webhook - SUCCESS",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var jsonData = pm.response.json();",
+              "pm.test('Webhook response OK', function () {",
+              "    pm.expect(jsonData.message).to.equal('OK');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Client-Id",
+            "value": "{{DOKU_CLIENT_ID}}"
+          },
+          {
+            "key": "Request-Id",
+            "value": "{{$uuid}}"
+          },
+          {
+            "key": "Request-Timestamp",
+            "value": "{{$timestamp}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"order\": {\n    \"amount\": 175000,\n    \"invoice_number\": \"{{gateway_order_id}}\",\n    \"currency\": \"IDR\"\n  },\n  \"transaction\": {\n    \"id\": \"TXN-{{$randomInt(100000, 999999)}}\",\n    \"status\": \"SUCCESS\"\n  },\n  \"channel\": {\n    \"id\": \"CREDIT_CARD\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/v1/doku/notification",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "v1", "doku", "notification"]
+        },
+        "description": "Simulate successful Doku webhook notification"
+      }
+    },
+    {
+      "name": "6. Simulate Webhook - FAILED",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var jsonData = pm.response.json();",
+              "pm.test('Webhook response OK', function () {",
+              "    pm.expect(jsonData.message).to.equal('OK');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Client-Id",
+            "value": "{{DOKU_CLIENT_ID}}"
+          },
+          {
+            "key": "Request-Id",
+            "value": "{{$uuid}}"
+          },
+          {
+            "key": "Request-Timestamp",
+            "value": "{{$timestamp}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"order\": {\n    \"amount\": 175000,\n    \"invoice_number\": \"{{gateway_order_id}}\",\n    \"currency\": \"IDR\"\n  },\n  \"transaction\": {\n    \"id\": \"TXN-{{$randomInt(100000, 999999)}}\",\n    \"status\": \"FAILED\"\n  },\n  \"channel\": {\n    \"id\": \"CREDIT_CARD\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/v1/doku/notification",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "v1", "doku", "notification"]
+        },
+        "description": "Simulate failed Doku webhook notification"
+      }
+    },
+    {
+      "name": "7. Get Booking Status",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var jsonData = pm.response.json();",
+              "pm.test('Booking data available', function () {",
+              "    pm.expect(jsonData).to.have.property('id');",
+              "    pm.expect(jsonData).to.have.property('status');",
+              "    pm.expect(jsonData).to.have.property('gateway_status');",
+              "    console.log('Booking Status:', jsonData.status);",
+              "    console.log('Gateway Status:', jsonData.gateway_status);",
+              "    console.log('Amount Paid:', jsonData.amount_paid);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{BASE_URL}}/api/v1/bookings/{{booking_id}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "v1", "bookings", "{{booking_id}}"]
+        },
+        "description": "Get current booking status and payment details"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "DOKU_CLIENT_ID",
+      "value": "BRN-0246-1785300782732",
+      "type": "string"
+    },
+    {
+      "key": "START_DATE",
+      "value": "2024-08-15",
+      "type": "string"
+    },
+    {
+      "key": "END_DATE",
+      "value": "2024-08-17",
+      "type": "string"
+    },
+    {
+      "key": "product_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "product_slug",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "booking_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "gateway_order_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payment_url",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

@@ -11,7 +11,11 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section as ComponentsSection;
 use Filament\Schemas\Schema;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Intervention\Image\Drivers\Gd\Driver;
+use Intervention\Image\ImageManager;
 
 class ProductForm
 {
@@ -105,7 +109,22 @@ class ProductForm
                         ->multiple()
                         ->reorderable()
                         ->imageEditor()
+                        ->disk('public') 
                         ->directory('products')
+                        ->saveUploadedFileUsing(function (FileUpload $component, UploadedFile $file): ?string {
+                            $manager = new ImageManager(new Driver());
+
+                            $encoded = $manager->read($file->getRealPath())
+                                ->scaleDown(width: 1600)
+                                ->toWebp(quality: 75);
+
+                            $filename = Str::uuid() . '.webp';
+                            $path = $component->getDirectory() . '/' . $filename;
+
+                            Storage::disk($component->getDiskName())->put($path, (string) $encoded);
+
+                            return $path;
+                        })
                         ->columnSpanFull(),
                 ]),
 

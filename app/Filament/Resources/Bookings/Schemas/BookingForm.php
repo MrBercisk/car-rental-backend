@@ -276,14 +276,21 @@ class BookingForm
                             'form' => 'Form Website',
                             'admin' => 'Input Admin',
                             'maintenance' => 'Blokir Servis / Maintenance',
+                            'payment_gateway' => 'Payment Gateway',
                         ])
                         ->required()
                         ->live()
                         ->default('admin')
                         ->helperText('Pilih "Blokir Servis" untuk mengunci tanggal unit tanpa booking customer (mis. mobil masuk bengkel).'),
 
+                    TextInput::make('gateway_order_id')
+                        ->label('Nomor Invoice/Booking')
+                        ->disabled()
+                        ->dehydrated()
+                        ->helperText('Terisi otomatis saat booking dibuat. Prefix INV- = via payment gateway, BK- = manual/admin/WhatsApp. Kosong untuk Blokir Servis.'),
+
                     Placeholder::make('amount_paid_display')
-                        ->label('Total Terbayar (cache)')
+                        ->label('Total Terbayar')
                         ->content(fn (?Booking $record) => 'Rp ' . number_format($record?->amount_paid ?? 0, 0, ',', '.'))
                         ->helperText('Dihitung otomatis dari tab Pembayaran. Tidak bisa diedit langsung di sini.'),
                 ]),
@@ -310,7 +317,6 @@ class BookingForm
                 ->collapsed()
                 ->schema([
                     TextInput::make('payment_gateway')->label('Gateway')->disabled(),
-                    TextInput::make('gateway_order_id')->label('Order ID')->disabled(),
                     TextInput::make('gateway_transaction_id')->label('Transaction ID')->disabled(),
                     TextInput::make('gateway_status')->label('Status Gateway')->disabled(),
                     TextInput::make('gateway_payment_method')->label('Metode Bayar')->disabled(),

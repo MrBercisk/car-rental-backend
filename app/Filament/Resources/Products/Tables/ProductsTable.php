@@ -34,9 +34,9 @@ class ProductsTable
             // hitung units & packages sekali lewat query, dipakai kolom badge di bawah
             ->modifyQueryUsing(fn (Builder $query) => $query->withCount(['units', 'packages']))
             ->columns([
-                ImageColumn::make('images')
+                ImageColumn::make('thumbnail')
                     ->label('Foto')
-                    ->getStateUsing(fn (Product $record) => $record->thumbnail)
+                    ->disk('public')
                     ->square(),
 
                 TextColumn::make('name')

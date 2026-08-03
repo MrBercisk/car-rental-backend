@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
@@ -73,10 +74,15 @@ class Booking extends Model
     {
         parent::boot();
  
-        // create cancel token
         static::creating(function (Booking $booking) {
+            // create cancel token
             if (empty($booking->cancel_token)) {
-                $booking->cancel_token = \Illuminate\Support\Str::random(40);
+                $booking->cancel_token = Str::random(40);
+            }
+            // generete invoice booking otomatis buat semua create dari API atau filament kecuali maintenance
+            if (empty($booking->gateway_order_id) && $booking->source !== 'maintenance') {
+                $prefix = $booking->payment_gateway ? 'INV' : 'BK';
+                $booking->gateway_order_id = $prefix . '-' . now()->format('Ymd') . '-' . strtoupper(Str::random(6));
             }
         });
     }

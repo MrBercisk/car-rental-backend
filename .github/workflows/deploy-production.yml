@@ -20,7 +20,25 @@ jobs:
       - name: Validasi Composer
         run: composer validate --no-check-all
 
-      - name: Deploy via SSH
+      # Jagoan Hosting blokir eval() (DISEVAL) sehingga composer TIDAK BISA
+      # dijalankan langsung di server. Solusinya: build vendor/ di runner ini,
+      # lalu kirim hasilnya ke server via SCP.
+      - name: Composer install (di runner, bukan di server)
+        run: composer install --no-dev --optimize-autoloader --no-interaction
+
+      - name: Sync kode + vendor ke server via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 45022
+          source: "."
+          target: "~/public_html/car-rental-backend"
+          rm: false
+          overwrite: true
+
+      - name: Jalankan migrate & cache di server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -32,9 +50,6 @@ jobs:
             set -e
 
             cd ~/public_html/car-rental-backend
-
-            git fetch origin
-            git reset --hard origin/main
 
             if [ ! -f .env ]; then
               cat > .env <<EOF
@@ -58,10 +73,6 @@ jobs:
             else
               echo ".env sudah ada, tidak ditimpa"
             fi
-
-            # Composer path Jagoan Hosting biasanya /opt/cpanel/composer/bin/composer
-            # Cek dulu path composer di server kamu lewat: which composer
-            composer install --no-dev --optimize-autoloader --no-interaction
 
             php artisan migrate --force
 

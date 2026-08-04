@@ -60,6 +60,10 @@ class Product extends Model
 
     public function getThumbnailAttribute(): ?string
     {
-        return $this->images[0] ?? null;
+        if (empty($this->images)) {
+            return null;
+        }
+
+        return $this->images[0];
     }
 }

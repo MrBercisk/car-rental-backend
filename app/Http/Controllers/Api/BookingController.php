@@ -25,6 +25,7 @@ class BookingController extends Controller
             'calendar_enabled' => (bool) config('booking.calendar_enabled'),
             'payment_proof_enabled' => (bool) config('booking.payment_proof_enabled'),
             'whatsapp_number' => $this->sanitizePhoneNumber(Setting::get('contact_phone')) ?? config('booking.whatsapp_number'),
+            'contact_address' => Setting::get('contact_address'),
         ]);
     }
 
@@ -129,6 +130,7 @@ class BookingController extends Controller
         $deliveryDistance = (float) ($data['delivery_distance_km'] ?? 0);
         $deliveryFee = $this->calculateDeliveryFee($deliveryDistance);
 
+        // gateway_order_id (nomor invoice/booking) di-generate otomatis oleh Booking::boot()
         $booking = Booking::create([
             'product_unit_id' => $unit->id,
             'start_date' => $data['start_date'],
@@ -143,7 +145,7 @@ class BookingController extends Controller
             'delivery_fee_price' => $deliveryFee,
             'status' => 'pending',
             'customer_name' => $data['customer_name'],
-            'customer_phone' => $data['customer_phone'],
+            'customer_phone' => $this->sanitizePhoneNumber($data['customer_phone']),
             'notes' => $data['notes'] ?? null,
             'source' => 'form',
         ]);
@@ -265,10 +267,7 @@ class BookingController extends Controller
     }
 
     /**
-     * Bersihkan string yang akan dikirim ke payment gateway (DOKU),
-     * hanya izinkan karakter yang diterima oleh validator DOKU:
-     * a-z A-Z 0-9 . - / + , = _ : ' @ % ( ) dan spasi.
-     * Whitespace berturut-turut dirapikan dan hasil akhir di-trim.
+     * Bersihkan string yang akan dikirim ke payment gateway
      */
     protected function sanitizeForGateway(?string $text, int $maxLength = 255): ?string
     {
@@ -321,7 +320,7 @@ class BookingController extends Controller
         $lines = array_merge($lines, [
             '',
             "Nama: {$data['customer_name']}",
-            "No HP: {$data['customer_phone']}",
+            "No HP: {$this->sanitizePhoneNumber($data['customer_phone'])}",
         ]);
  
         if (! empty($data['notes'])) {
@@ -398,10 +397,10 @@ class BookingController extends Controller
     
         // Sesuai getTotalPriceAttribute(): package_price + driver_surcharge_price + delivery_fee_price
         $grossAmount = (int) $packagePrice + ($withDriver ? $driverFee : 0) + $deliveryFee;
-        $invoiceNumber = 'INV-' . now()->format('Ymd') . '-' . strtoupper(Str::random(6));
         $paymentDueMinutes = 60;
     
         // simpan booking dulu, kalau gateway gagal nanti dicancel lagi di bawah
+        // gateway order id (nomor invoice) di generate di model Booking:boot otomatis
         $booking = Booking::create([
             'product_unit_id' => $unit->id,
             'start_date' => $data['start_date'],
@@ -420,10 +419,11 @@ class BookingController extends Controller
             'notes' => $data['notes'] ?? null,
             'source' => 'payment_gateway',
             'payment_gateway' => $selectedGateway,
-            'gateway_order_id' => $invoiceNumber,
             'gross_amount' => $grossAmount,
             'expired_at' => now()->addMinutes($paymentDueMinutes),
         ]);
+
+        $invoiceNumber = $booking->gateway_order_id;
     
         $gateway = $gatewayManager->resolve($selectedGateway);
 

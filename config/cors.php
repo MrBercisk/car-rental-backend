@@ -13,9 +13,9 @@ return [
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
-        'http://localhost:3000',        // Next.js waktu development (npm run dev)
-        // 'https://rentalkamu.com',    // domain production Next.js , aktifkan nanti
-        // 'https://www.rentalkamu.com',
+        'http://localhost:3000',
+        'https://morarent.codemora.my.id',
+
     ],
 
     'allowed_origins_patterns' => [],

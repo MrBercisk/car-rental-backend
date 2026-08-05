@@ -5,12 +5,18 @@ use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\DokuNotificationController;
+use App\Http\Controllers\Api\GeminiConciergeController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\TestimonialController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
+
+    // ai gemini chat cs
+    Route::post('/assistant/chat', [GeminiConciergeController::class, 'chat'])
+     ->middleware('throttle:assistant-chat')
+    ;
 
     // setting
     Route::get('/settings', SettingController::class . '@index')->name('settings.index');
@@ -57,4 +63,6 @@ Route::prefix('v1')->group(function () {
     Route::post('/contact', [ContactController::class, 'store'])
         ->middleware('throttle:contact')
         ->name('contact.store');
+
+
 });

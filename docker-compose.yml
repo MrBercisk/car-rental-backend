@@ -1,0 +1,54 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rental-app
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - ./:/var/www/html
+    networks:
+      - rental-network
+    depends_on:
+      - mysql
+
+  mysql:
+    image: mysql:8.0
+    container_name: rental-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: rental_cms
+      MYSQL_USER: rental_user
+      MYSQL_PASSWORD: rental_pass
+      MYSQL_ROOT_PASSWORD: root_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - rental-mysql-data:/var/lib/mysql
+    networks:
+      - rental-network
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: rental-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: root_pass
+    ports:
+      - "8080:80"
+    networks:
+      - rental-network
+    depends_on:
+      - mysql
+
+networks:
+  rental-network:
+    driver: bridge
+
+volumes:
+  rental-mysql-data:
+    driver: local

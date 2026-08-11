@@ -13,6 +13,20 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: true
+          MYSQL_DATABASE: testing
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -20,7 +34,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.2"
-          extensions: mbstring, pdo_sqlite, sqlite3, bcmath, fileinfo
+          extensions: mbstring, pdo_mysql, bcmath, fileinfo
           coverage: none
 
       - name: Validasi Composer
@@ -42,10 +56,22 @@ jobs:
           cp .env.example .env
           php artisan key:generate
 
+      - name: Tunggu MySQL siap
+        run: |
+          for i in {1..30}; do
+            mysqladmin ping -h 127.0.0.1 -P 3306 -u root --silent && break
+            echo "Menunggu MySQL... ($i)"
+            sleep 2
+          done
+
       - name: Jalankan Test
         env:
-          DB_CONNECTION: sqlite
-          DB_DATABASE: ":memory:"
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: testing
+          DB_USERNAME: root
+          DB_PASSWORD: ""
         run: php artisan test
 
   deploy:

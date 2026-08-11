@@ -18,7 +18,6 @@ class CategoryFactory extends Factory
             'name' => $name,
             'slug' => Str::slug($name) . '-' . fake()->unique()->numberBetween(1, 100000),
             'description' => fake()->sentence(),
-            'image' => null,
             'is_active' => true,
             'sort_order' => fake()->numberBetween(0, 100),
         ];

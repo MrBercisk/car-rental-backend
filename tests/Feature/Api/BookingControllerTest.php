@@ -38,7 +38,7 @@ class BookingControllerTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('success', true)
             ->assertJsonPath('booking.delivery_address', 'Bandara YIA')
-            ->assertJsonPath('booking.delivery_distance_km', 25.0)
+            ->assertJsonPath('booking.delivery_distance_km', 25)
             ->assertJsonPath('booking.delivery_fee_price', 125000);
 
         $booking = Booking::latest('id')->first();

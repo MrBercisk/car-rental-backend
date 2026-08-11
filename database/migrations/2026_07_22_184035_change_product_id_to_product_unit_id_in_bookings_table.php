@@ -41,28 +41,13 @@ return new class extends Migration
         //    baru kolomnya -- urutan ini WAJIB karena index tidak bisa
         //    dihapus selama masih dipakai foreign key constraint.
         if (Schema::hasColumn('bookings', 'product_id')) {
-            $fkExists = DB::selectOne("
-                SELECT COUNT(*) as total FROM information_schema.TABLE_CONSTRAINTS
-                WHERE CONSTRAINT_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'bookings'
-                AND CONSTRAINT_NAME = 'bookings_product_id_foreign'
-                AND CONSTRAINT_TYPE = 'FOREIGN KEY'
-            ")->total;
-
-            if ($fkExists > 0) {
+            if ($this->foreignKeyExists('bookings', 'bookings_product_id_foreign')) {
                 Schema::table('bookings', function (Blueprint $table) {
                     $table->dropForeign(['product_id']);
                 });
             }
 
-            $indexExists = DB::selectOne("
-                SELECT COUNT(*) as total FROM information_schema.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'bookings'
-                AND INDEX_NAME = 'bookings_product_id_start_date_end_date_index'
-            ")->total;
-
-            if ($indexExists > 0) {
+            if ($this->indexExists('bookings', 'bookings_product_id_start_date_end_date_index')) {
                 Schema::table('bookings', function (Blueprint $table) {
                     $table->dropIndex(['product_id', 'start_date', 'end_date']);
                 });
@@ -74,14 +59,7 @@ return new class extends Migration
         }
 
         // 4. Tambah index baru kalau belum ada
-        $newIndexExists = DB::selectOne("
-            SELECT COUNT(*) as total FROM information_schema.STATISTICS
-            WHERE TABLE_SCHEMA = DATABASE()
-            AND TABLE_NAME = 'bookings'
-            AND INDEX_NAME = 'bookings_product_unit_id_start_date_end_date_index'
-        ")->total;
-
-        if ($newIndexExists === 0) {
+        if (! $this->indexExists('bookings', 'bookings_product_unit_id_start_date_end_date_index')) {
             Schema::table('bookings', function (Blueprint $table) {
                 $table->index(['product_unit_id', 'start_date', 'end_date']);
             });
@@ -106,5 +84,93 @@ return new class extends Migration
         Schema::table('bookings', function (Blueprint $table) {
             $table->index(['product_id', 'start_date', 'end_date']);
         });
+    }
+
+    /**
+     * Cek apakah foreign key dengan nama tertentu ada di tabel.
+     * Database-agnostic: pakai information_schema di MySQL,
+     * pakai PRAGMA foreign_key_list di SQLite.
+     */
+    private function foreignKeyExists(string $table, string $foreignKeyName): bool
+    {
+        $driver = DB::connection()->getDriverName();
+
+        if ($driver === 'sqlite') {
+            // SQLite tidak menyimpan nama constraint custom, jadi kita
+            // cocokkan berdasarkan kolom yang dipakai FK-nya.
+            $column = str($foreignKeyName)
+                ->after($table . '_')
+                ->beforeLast('_foreign')
+                ->toString();
+
+            $foreignKeys = DB::select("PRAGMA foreign_key_list(\"{$table}\")");
+
+            return collect($foreignKeys)->contains(fn ($fk) => $fk->from === $column);
+        }
+
+        if ($driver === 'mysql') {
+            $total = DB::selectOne("
+                SELECT COUNT(*) as total FROM information_schema.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = ?
+                AND CONSTRAINT_NAME = ?
+                AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+            ", [$table, $foreignKeyName])->total;
+
+            return $total > 0;
+        }
+
+        if ($driver === 'pgsql') {
+            $total = DB::selectOne("
+                SELECT COUNT(*) as total FROM information_schema.table_constraints
+                WHERE table_name = ?
+                AND constraint_name = ?
+                AND constraint_type = 'FOREIGN KEY'
+            ", [$table, $foreignKeyName])->total;
+
+            return $total > 0;
+        }
+
+        // Driver tidak dikenal: anggap tidak ada, biar tidak crash.
+        return false;
+    }
+
+    /**
+     * Cek apakah index dengan nama tertentu ada di tabel.
+     * Database-agnostic: pakai information_schema di MySQL,
+     * pakai PRAGMA index_list di SQLite.
+     */
+    private function indexExists(string $table, string $indexName): bool
+    {
+        $driver = DB::connection()->getDriverName();
+
+        if ($driver === 'sqlite') {
+            $indexes = DB::select("PRAGMA index_list(\"{$table}\")");
+
+            return collect($indexes)->contains(fn ($idx) => $idx->name === $indexName);
+        }
+
+        if ($driver === 'mysql') {
+            $total = DB::selectOne("
+                SELECT COUNT(*) as total FROM information_schema.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = ?
+                AND INDEX_NAME = ?
+            ", [$table, $indexName])->total;
+
+            return $total > 0;
+        }
+
+        if ($driver === 'pgsql') {
+            $total = DB::selectOne("
+                SELECT COUNT(*) as total FROM pg_indexes
+                WHERE tablename = ?
+                AND indexname = ?
+            ", [$table, $indexName])->total;
+
+            return $total > 0;
+        }
+
+        return false;
     }
 };

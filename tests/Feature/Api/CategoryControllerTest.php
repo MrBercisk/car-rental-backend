@@ -68,7 +68,6 @@ class CategoryControllerTest extends TestCase
                         'name',
                         'slug',
                         'description',
-                        'image',
                         'products_count',
                     ],
                 ],

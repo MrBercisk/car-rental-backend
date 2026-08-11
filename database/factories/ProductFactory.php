@@ -25,7 +25,6 @@ class ProductFactory extends Factory
             'fuel_type' => fake()->randomElement(['bensin', 'diesel', 'listrik']),
             'seat_capacity' => fake()->numberBetween(2, 8),
             'luggage_capacity' => fake()->numberBetween(1, 5),
-            'license_plate' => strtoupper(fake()->bothify('B #### ??')),
             'description' => fake()->paragraph(),
             'features' => fake()->randomElements(
                 ['AC', 'Audio System', 'GPS', 'Airbag', 'Rear Camera'],

@@ -4,9 +4,53 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: mbstring, pdo_sqlite, sqlite3, bcmath, fileinfo
+          coverage: none
+
+      - name: Validasi Composer
+        run: composer validate --no-check-all
+
+      - name: Cache Composer Dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Composer install (dengan dev dependencies untuk testing)
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Siapkan environment testing
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Jalankan Test
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ":memory:"
+        run: php artisan test
+
   deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
@@ -47,9 +91,13 @@ jobs:
           port: 45022
           envs: APP_URL,DB_HOST,DB_DATABASE,DB_USERNAME,DB_PASSWORD,DB_PORT
           script: |
-            set -e
-
             cd ~/public_html/car-rental-backend
+
+            # Pastikan situs SELALU keluar dari mode maintenance apa pun
+            # yang terjadi di bawah — walau migrate/step lain gagal.
+            trap 'php artisan up || true' EXIT
+
+            set -e
 
             if [ ! -f .env ]; then
               cat > .env <<EOF
@@ -73,6 +121,21 @@ jobs:
             else
               echo ".env sudah ada, tidak ditimpa"
             fi
+
+            php artisan down || true
+
+            # Backup database sebelum migrate, dibaca dari .env yang benar-
+            # benar dipakai server (bukan dari secrets), biar selalu sinkron
+            # meski .env pernah diedit manual. Simpan maksimal 5 terakhir.
+            mkdir -p storage/backups
+            LIVE_DB_DATABASE=$(grep -m1 '^DB_DATABASE=' .env | cut -d '=' -f2)
+            LIVE_DB_USERNAME=$(grep -m1 '^DB_USERNAME=' .env | cut -d '=' -f2)
+            LIVE_DB_PASSWORD=$(grep -m1 '^DB_PASSWORD=' .env | cut -d '=' -f2)
+            LIVE_DB_HOST=$(grep -m1 '^DB_HOST=' .env | cut -d '=' -f2)
+            LIVE_DB_PORT=$(grep -m1 '^DB_PORT=' .env | cut -d '=' -f2)
+            BACKUP_FILE="storage/backups/backup_$(date +%Y%m%d_%H%M%S).sql"
+            mysqldump -h "$LIVE_DB_HOST" -P "$LIVE_DB_PORT" -u "$LIVE_DB_USERNAME" -p"$LIVE_DB_PASSWORD" "$LIVE_DB_DATABASE" > "$BACKUP_FILE" || echo "WARNING: backup gagal, lanjut deploy tanpa backup"
+            ls -t storage/backups/backup_*.sql 2>/dev/null | tail -n +6 | xargs -r rm --
 
             php artisan migrate --force
 
